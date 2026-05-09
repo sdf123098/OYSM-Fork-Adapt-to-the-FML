@@ -1,8 +1,8 @@
+
+
 package com.elfmcys.yesstevemodel.geckolib3.geo;
 
 import com.elfmcys.yesstevemodel.NativeLibLoader;
-import rip.ysm.compat.oculus.OculusCompat;
-import rip.ysm.compat.optifine.OptiFineDetector;
 import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
 import com.elfmcys.yesstevemodel.config.GeneralConfig;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.*;
@@ -10,10 +10,11 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import rip.ysm.api.client.BufferBuilderBridge;
 import net.minecraft.client.renderer.LightTexture;
 import org.joml.*;
 import org.lwjgl.system.MemoryUtil;
+import rip.ysm.compat.oculus.OculusCompat;
+import rip.ysm.compat.optifine.OptiFineDetector;
 
 import java.lang.Math;
 import java.nio.ByteBuffer;
@@ -28,8 +29,8 @@ public class NativeModelRenderer {
         boolean isCompatMode = OptiFineDetector.isOptifinePresent() || GeneralConfig.USE_COMPATIBILITY_RENDERER.get();
         RenderSystem.getProjectionMatrix().mul(RenderSystem.getModelViewMatrix(), projectionModelViewMatrix);
         boolean isPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
-
         if (/*NativeLibLoader.isLoaded()*/false) { // WIP: SIMD MODEL RENDER
+
             nativeRenderModel(
                     buffer,
                     pose,
@@ -103,7 +104,6 @@ public class NativeModelRenderer {
         }
 
         for (int i = 0; i < mesh.bakedBones.size(); i++) {
-            // 如果骨骼被標記為不可見直接跳過當前骨骼
             if (!boneVisible[i]) {
                 continue;
             }
@@ -182,7 +182,7 @@ public class NativeModelRenderer {
 
         if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
             isVisible = false;
-        }
+        }/* else if (unk1 == 1 || unk2 == 1) isVisible = false;*/
 
         localMat.translate(
                 (bone.pivotX - animTx) * 0.0625f,
@@ -208,77 +208,53 @@ public class NativeModelRenderer {
         return localMat;
     }
 
-    private static final ByteBuffer matrixTransferBuffer = ByteBuffer.allocateDirect(64 * 4).order(ByteOrder.nativeOrder());
-    private static final FloatBuffer matrixTransferFloatBuffer = matrixTransferBuffer.asFloatBuffer();
+    private static final float[] matrixTransferArray = new float[48];
+    @SuppressWarnings("unused") // TODO: native中直接往VertexConsumer中的buffer写入顶点
+    public static void submitVertices(VertexConsumer vertexConsumer, int vertexCount, float[] fArr, int[] iArr) {
+        int floatIndex = 0;
+        int intIndex = 0;
 
-    private static int currentAnimBufferCapacityBytes = 512 * 12 * 4;
-    private static ByteBuffer animTransferBuffer = ByteBuffer.allocateDirect(currentAnimBufferCapacityBytes).order(ByteOrder.nativeOrder());
-    private static FloatBuffer animTransferFloatBuffer = animTransferBuffer.asFloatBuffer();
+        for (int i = 0; i < vertexCount; i++) {
+            vertexConsumer.vertex(
+                    // position
+                    fArr[floatIndex + 0], fArr[floatIndex + 1], fArr[floatIndex + 2],
+                    // rgba
+                    fArr[floatIndex + 3], fArr[floatIndex + 4], fArr[floatIndex + 5], fArr[floatIndex + 6],
+                    // uv
+                    fArr[floatIndex + 7], fArr[floatIndex + 8],
+                    // overlay light
+                    iArr[intIndex + 0], iArr[intIndex + 1],
+                    //normal
+                    fArr[floatIndex + 9], fArr[floatIndex + 10], fArr[floatIndex + 11]
+            );
+            floatIndex += 12;
+            intIndex += 2;
+        }
+    }
 
-    public static void nativeRenderModel(
-            VertexConsumer vertexConsumer,
-            PoseStack.Pose pose,
-            Matrix4f projectionModelViewMatrix,
-            boolean isCompatMode,
-            GeoModel mesh,
-            float[] boneVertex,
-            float[] stateBuffer,
-            int textureIndex, int renderPartMask,
-            int packedLight, int packedOverlay,
-            float r, float g, float b, float a,
-            boolean isPreview) {
+
+    public static void nativeRenderModel( // TODO:
+            VertexConsumer vertexConsumer, PoseStack.Pose pose, Matrix4f projectionModelViewMatrix,
+            boolean isCompatMode, GeoModel mesh, float[] boneVertex, float[] stateBuffer,
+            int textureIndex, int renderPartMask, int packedLight, int packedOverlay,
+            float r, float g, float b, float a, boolean isPreview) {
 
         if (mesh.nativeModelHandle == 0) return;
 
         Matrix4f projMat = RenderSystem.getProjectionMatrix();
-        ByteBuffer outBuffer = mesh.vertexOutBuffer;
-        boolean useDirectMemoryTransfer = !isCompatMode && (vertexConsumer instanceof BufferBuilder) && BufferBuilderBridge.supportsDirectTransfer();
 
-        matrixTransferFloatBuffer.clear();
-        pose.pose().get(0, matrixTransferFloatBuffer);
-        pose.normal().get(16, matrixTransferFloatBuffer);
-        projMat.get(32, matrixTransferFloatBuffer);
+        pose.pose().get(matrixTransferArray, 0);
+        pose.normal().get(matrixTransferArray, 16);
+        projMat.get(matrixTransferArray, 32);
 
-        int requiredBytes = boneVertex.length * 4;
-        if (currentAnimBufferCapacityBytes < requiredBytes) {
-            currentAnimBufferCapacityBytes = Math.max(currentAnimBufferCapacityBytes * 2, requiredBytes);
-            animTransferBuffer = ByteBuffer.allocateDirect(currentAnimBufferCapacityBytes).order(ByteOrder.nativeOrder());
-            animTransferFloatBuffer = animTransferBuffer.asFloatBuffer();
-        }
-        animTransferFloatBuffer.clear();
-        animTransferFloatBuffer.put(boneVertex);
-
-        int vertexCount = GeoModel.nComputeModelVertices(mesh.nativeModelHandle, outBuffer, matrixTransferBuffer, animTransferBuffer, renderPartMask, packedLight, packedOverlay, r, g, b, a, useDirectMemoryTransfer);
-
-        if (vertexCount == 0) return;
-
-        if (useDirectMemoryTransfer) {
-            BufferBuilder builder = (BufferBuilder) vertexConsumer;
-            outBuffer.position(0);
-            outBuffer.limit(vertexCount * 36);
-            BufferBuilderBridge.putBulkData(builder, outBuffer);
-            outBuffer.clear();
-        } else {
-            long address = MemoryUtil.memAddress(mesh.vertexOutBuffer);
-            for (int i = 0; i < vertexCount; i++) {
-                long ptr = address + (i * 14L * 4L);
-                float vx = MemoryUtil.memGetFloat(ptr);
-                float vy = MemoryUtil.memGetFloat(ptr + 4);
-                float vz = MemoryUtil.memGetFloat(ptr + 8);
-                float vr = MemoryUtil.memGetFloat(ptr + 12);
-                float vg = MemoryUtil.memGetFloat(ptr + 16);
-                float vb = MemoryUtil.memGetFloat(ptr + 20);
-                float va = MemoryUtil.memGetFloat(ptr + 24);
-                float u = MemoryUtil.memGetFloat(ptr + 28);
-                float v = MemoryUtil.memGetFloat(ptr + 32);
-                int overlay = MemoryUtil.memGetInt(ptr + 36);
-                int light = MemoryUtil.memGetInt(ptr + 40);
-                float nx = MemoryUtil.memGetFloat(ptr + 44);
-                float ny = MemoryUtil.memGetFloat(ptr + 48);
-                float nz = MemoryUtil.memGetFloat(ptr + 52);
-                vertexConsumer.vertex(vx, vy, vz, vr, vg, vb, va, u, v, overlay, light, nx, ny, nz);
-            }
-        }
-
+        GeoModel.nComputeModelVertices(
+                mesh.nativeModelHandle,
+                vertexConsumer,
+                matrixTransferArray,
+                boneVertex,
+                renderPartMask,
+                packedLight, packedOverlay,
+                r, g, b, a
+        );
     }
 }

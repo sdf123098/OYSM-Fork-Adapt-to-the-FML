@@ -18,7 +18,8 @@ public final class CameraUtil {
     }
 
     public static boolean isFirstPerson(AnimatableEntity<? extends Entity> animatableEntity) {
-        return animatableEntity.getEntity() == Minecraft.getInstance().player && ModelPreviewRenderer.isFirstPerson() && !OculusCompat.isPBRActive() && Minecraft.getInstance().options.getCameraType().ordinal() == CameraType.FIRST_PERSON.ordinal();
+        return animatableEntity.getEntity() == Minecraft.getInstance().player
+                && ModelPreviewRenderer.isFirstPerson() && !OculusCompat.isPBRActive() && Minecraft.getInstance().options.getCameraType().ordinal() == CameraType.FIRST_PERSON.ordinal();
     }
 
     public static boolean isThirdPerson(IContext<? extends Entity> IContext) {

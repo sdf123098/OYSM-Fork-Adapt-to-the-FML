@@ -33,7 +33,11 @@ public class ReplacePlayerRenderEvent {
         boolean[] cancelled = {false};
         PlayerCapability.get(entity).ifPresent(cap -> {
             if (cap.isModelActive()) {
-                if (!CameraUtil.isFirstPerson(cap) || FirstPersonCompat.isFirstPersonActive() || RealCameraCompat.isActive() || GeneralConfig.DISABLE_EXTERNAL_FP_ANIM.get().booleanValue() || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
+                if (!CameraUtil.isFirstPerson(cap)
+                        || FirstPersonCompat.isFirstPersonActive()
+                        || RealCameraCompat.isActive()
+                        || GeneralConfig.DISABLE_EXTERNAL_FP_ANIM.get().booleanValue()
+                        || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
                     cancelled[0] = true;
                     RendererManager.getPlayerRenderer().render(entity, entity.getYRot(), partialTick, poseStack, bufferSource, packedLight);
                 }

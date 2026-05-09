@@ -1,6 +1,8 @@
 package rip.ysm.compat.touhoulittlemaid.fabric;
 
 import com.elfmcys.yesstevemodel.network.message.FeedbackData;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 
@@ -29,6 +31,7 @@ public final class TouhouMaidCompatImpl {
     public static void applyFeedback(Entity entity, FeedbackData message) {
     }
 
+    @Environment(EnvType.CLIENT)
     public static void playMaidAnimation(Entity entity, String str) {
     }
 }

@@ -8,6 +8,8 @@ import com.elfmcys.yesstevemodel.util.obfuscate.Keep;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import dev.architectury.platform.Platform;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
@@ -78,6 +80,7 @@ public class YesSteveModel {
         return NativeLibLoader.isOnAndroid();
     }
 
+    @Environment(EnvType.CLIENT)
     public static void sendUnavailableMessage() {
         LocalPlayer localPlayer = Minecraft.getInstance().player;
         if (localPlayer != null) {

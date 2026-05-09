@@ -6,11 +6,13 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.animated.AnimatedGeoBone;
 import com.github.tartaricacid.touhoulittlemaid.geckolib3.core.processor.ILocationBone;
 import com.github.tartaricacid.touhoulittlemaid.geckolib3.geo.animated.ILocationModel;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 
 
 import java.util.List;
 
-
+@OnlyIn(Dist.CLIENT)
 public class TouhouMaidBoneProcessor {
     public static ILocationBone createLocationBone(final AnimatedGeoBone bone) {
         return new ILocationBone() {

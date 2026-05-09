@@ -4,6 +4,8 @@ import com.elfmcys.yesstevemodel.client.entity.GeckoProjectileEntity;
 import com.elfmcys.yesstevemodel.molang.runtime.Int2FloatOpenHashMapStruct;
 import dev.architectury.injectables.annotations.ExpectPlatform;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 
@@ -11,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 
-
+@Environment(EnvType.CLIENT)
 public class ProjectileCapability extends GeckoProjectileEntity {
 
     @ExpectPlatform

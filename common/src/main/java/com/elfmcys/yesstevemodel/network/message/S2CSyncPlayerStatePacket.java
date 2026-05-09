@@ -8,6 +8,8 @@ import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatMaps;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.objects.*;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.effect.MobEffect;
@@ -303,7 +305,7 @@ public class S2CSyncPlayerStatePacket {
         }
     }
 
-    
+    @Environment(EnvType.CLIENT)
     public static void handleCapability(Entity entity, S2CSyncPlayerStatePacket message) {
         if (entity instanceof Player) {
             PlayerCapability.get(entity).ifPresent(cap -> {

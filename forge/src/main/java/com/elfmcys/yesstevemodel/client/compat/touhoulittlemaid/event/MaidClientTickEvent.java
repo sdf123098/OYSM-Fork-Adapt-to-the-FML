@@ -6,9 +6,11 @@ import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
-
+@OnlyIn(Dist.CLIENT)
 public class MaidClientTickEvent {
     @SubscribeEvent
     public void onMaidClientTick(YsmMaidClientTickEvent event) {

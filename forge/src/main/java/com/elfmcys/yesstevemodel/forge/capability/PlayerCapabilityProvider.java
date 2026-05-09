@@ -4,6 +4,8 @@ import com.elfmcys.yesstevemodel.capability.PlayerCapability;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.Direction;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.CapabilityManager;
 import net.minecraftforge.common.capabilities.CapabilityToken;
@@ -12,7 +14,7 @@ import net.minecraftforge.common.util.LazyOptional;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-
+@OnlyIn(Dist.CLIENT)
 public class PlayerCapabilityProvider implements ICapabilityProvider {
 
     public static Capability<PlayerCapability> PLAYER_CAP = CapabilityManager.get(new CapabilityToken<PlayerCapability>() {

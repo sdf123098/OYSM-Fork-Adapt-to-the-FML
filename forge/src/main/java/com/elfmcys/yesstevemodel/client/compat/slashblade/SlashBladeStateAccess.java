@@ -3,7 +3,7 @@ package com.elfmcys.yesstevemodel.client.compat.slashblade;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import com.elfmcys.yesstevemodel.util.UnsafeUtil;
 import mods.flammpfeil.slashblade.capability.slashblade.SlashBladeState;
-import mods.flammpfeil.slashblade.registry.combo.ComboState;
+import mods.flammpfeil.slashblade.capability.slashblade.ComboState;
 
 public class SlashBladeStateAccess {
 
@@ -25,7 +25,7 @@ public class SlashBladeStateAccess {
         if (j > comboState.getTimeoutMS()) {
             return StringPool.EMPTY;
         }
-        String name = comboState.toString();
+        String name = comboState.getName();
         if (name.startsWith("ex_")) {
             name = name.substring(3);
         }

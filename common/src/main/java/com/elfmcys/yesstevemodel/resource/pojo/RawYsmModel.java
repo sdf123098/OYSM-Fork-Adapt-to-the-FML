@@ -217,7 +217,6 @@ public class RawYsmModel {
 
         // 作用暫時不明確，且通常為1
         public int unknownFlag;
-        public boolean isPng;
     }
 
     public static class RawProperties {

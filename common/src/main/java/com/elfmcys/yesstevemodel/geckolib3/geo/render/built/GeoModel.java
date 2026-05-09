@@ -3,6 +3,7 @@ package com.elfmcys.yesstevemodel.geckolib3.geo.render.built;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import com.elfmcys.yesstevemodel.geckolib3.geo.animated.AnimatedGeoModel;
 import com.elfmcys.yesstevemodel.resource.models.GeometryDescription;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntLists;
@@ -99,8 +100,8 @@ public class GeoModel {
 
     public static class BakedCube {
         public boolean cullable = false;
-        public float pivotX, pivotY, pivotZ;
-        public float rotX, rotY, rotZ;
+        //        public float pivotX, pivotY, pivotZ;
+//        public float rotX, rotY, rotZ;
         public List<BakedQuad> quads = new ObjectArrayList<>();
     }
 
@@ -110,19 +111,38 @@ public class GeoModel {
         public Vector3f normal;
     }
 
+//    static {
+//        System.load("test.dll");
+//    }
+
     public long nativeModelHandle = 0;
-    public final ByteBuffer vertexOutBuffer = /*ByteBuffer.allocateDirect(900000 * 14 * 4).order(ByteOrder.nativeOrder())*/null; //FIXME
 
     public static native long nInitModelCache(ByteBuffer buffer);
 
     public static native void nDestroyModelCache(long handle);
 
-    public static native int nComputeModelVertices(long handle, ByteBuffer outBuffer, ByteBuffer matrixBuffer, ByteBuffer animBuffer, int renderPartMask, int packedLight, int packedOverlay, float r, float g, float b, float a, boolean sb);
+    public static native void nComputeModelVertices(
+            long handle, VertexConsumer vertexConsumer,
+            float[] matrixTransfer, float[] animTransfer,
+            int renderPartMask, int packedLight, int packedOverlay,
+            float r, float g, float b, float a);
 
     public void buildNativeCache() {
         if (bakedBones == null || bakedBones.isEmpty()) return;
 
-        ByteBuffer buffer = ByteBuffer.allocateDirect(1024 * 1024 * 20).order(ByteOrder.nativeOrder());
+        int totalBones = bakedBones.size();
+        int totalCubes = 0;
+        int totalQuads = 0;
+
+        for (BakedBone bone : bakedBones) {
+            totalCubes += bone.cubes.size();
+            for (BakedCube cube : bone.cubes) {
+                totalQuads += cube.quads.size();
+            }
+        }
+
+        int initBufferSize = 4 + (totalBones * 25) + (totalCubes * 5) + (totalQuads * 92);
+        ByteBuffer buffer = ByteBuffer.allocateDirect(initBufferSize).order(ByteOrder.nativeOrder());
 
         buffer.putInt(bakedBones.size());
         for (BakedBone bone : bakedBones) {
@@ -138,16 +158,16 @@ public class GeoModel {
                 buffer.put((byte) (cube.cullable ? 1 : 0));
                 buffer.putInt(cube.quads.size());
                 for (BakedQuad quad : cube.quads) {
-                    for (int v = 0; v < 4; v++) { // 12 floats
+                    for (int v = 0; v < 4; v++) {
                         buffer.putFloat(quad.positions[v].x());
                         buffer.putFloat(quad.positions[v].y());
                         buffer.putFloat(quad.positions[v].z());
                     }
-                    for (int v = 0; v < 4; v++) { // 8 floats
+                    for (int v = 0; v < 4; v++) {
                         buffer.putFloat(quad.uvs[v].x());
                         buffer.putFloat(quad.uvs[v].y());
                     }
-                    // 3 floats
+                    // 3 floats *4=12
                     buffer.putFloat(quad.normal.x());
                     buffer.putFloat(quad.normal.y());
                     buffer.putFloat(quad.normal.z());

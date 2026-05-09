@@ -2,6 +2,8 @@ package com.elfmcys.yesstevemodel.client.gui.button;
 
 import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.client.gui.ISpecialWidget;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.StateSwitchingButton;
@@ -11,7 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.function.Consumer;
 
-
+@Environment(EnvType.CLIENT)
 public class ConfigCheckBox extends StateSwitchingButton implements ISpecialWidget {
 
     private static final ResourceLocation location = new ResourceLocation(YesSteveModel.MOD_ID, "texture/roulette.png");

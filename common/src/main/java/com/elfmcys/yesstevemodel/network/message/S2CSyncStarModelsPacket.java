@@ -2,6 +2,8 @@ package com.elfmcys.yesstevemodel.network.message;
 
 import com.elfmcys.yesstevemodel.capability.StarModelsCapability;
 import com.google.common.collect.Sets;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import rip.ysm.api.network.PacketContext;
@@ -39,7 +41,7 @@ public class S2CSyncStarModelsPacket {
         }
     }
 
-    
+    @Environment(EnvType.CLIENT)
     public static void handleCapability(S2CSyncStarModelsPacket message) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {

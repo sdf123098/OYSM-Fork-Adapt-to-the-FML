@@ -226,7 +226,6 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             }
         }
 
-        List<RawYsmModel.RawTexture> tempTextures = new ArrayList<>();
         int customTextureCount = reader.readVarInt();
         for (int i = 0; i < customTextureCount; ++i) {
             RawYsmModel.RawTexture tex = new RawYsmModel.RawTexture();
@@ -253,7 +252,6 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
             model.mainEntity.textures.put(tex.name, tex);
 
-            tempTextures.add(tex);
         }
 
         if (format > 9) {
@@ -267,15 +265,16 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             }
         }
 
+        List<RawYsmModel.RawImage> tempAvatars = new ArrayList<>();
         int extraTextureCount = reader.readVarInt();
         for (int i = 0; i < extraTextureCount; ++i) {
-            RawYsmModel.RawTexture tex = new RawYsmModel.RawTexture();
-            tex.name = reader.readString();
-            tex.data = reader.readByteArray();
-            tex.width = reader.readVarInt();
-            tex.height = reader.readVarInt();
-            tex.imageFormat = -1; // RGBA
-            model.mainEntity.textures.put(tex.name, tex); // 作為額外紋理存入主實體
+            RawYsmModel.RawImage avatar = new RawYsmModel.RawImage();
+            avatar.name = reader.readString();
+            avatar.data = reader.readByteArray();
+            avatar.width = reader.readVarInt();
+            avatar.height = reader.readVarInt();
+            avatar.format = -1; // 兼容旧版默认 RGBA
+            tempAvatars.add(avatar);
         }
 
         // Tables回填Hash
@@ -293,10 +292,10 @@ public class YSMBinaryDeserializer implements AutoCloseable{
         for (int i = 0; i < animationTableSize; ++i) {
             int animationId = reader.readVarInt();
             String animationHash = reader.readString();
-            if (tempAnims.get(animationId) == null) {
-                "".hashCode();
-
-            }
+//            if (tempAnims.get(animationId) == null) {
+//                "".hashCode();
+//
+//            }
             tempAnims.get(animationId).fileHash = animationHash;
         }
 
@@ -325,14 +324,21 @@ public class YSMBinaryDeserializer implements AutoCloseable{
         }
         for (RawYsmModel.RawSubEntity value : model.projectiles.values()) {
             for (RawYsmModel.RawTexture rawTexture : value.textures.values()) {
-                RawYsmModel.RawTexture remove = model.mainEntity.textures.remove(rawTexture.name);
-                if (remove != null) {
-                    System.out.println();
-                }
+                model.mainEntity.textures.remove(rawTexture.name);
             }
         }
 
         parseYSMJson();
+
+        for (int i = 0; i < tempAvatars.size(); i++) {
+            RawYsmModel.RawImage avatar = tempAvatars.get(i);
+            if (i < model.metadata.authors.size()) {
+                model.metadata.authors.get(i).avatar = avatar.name;
+                model.metadata.authors.get(i).avatarImage = avatar;
+            } else {
+                model.metadata.extraAvatars.add(avatar);
+            }
+        }
     }
 
     private void deserializeModern() {
@@ -633,7 +639,6 @@ public class YSMBinaryDeserializer implements AutoCloseable{
                 avatar.height = reader.readVarInt();
                 avatar.format = reader.readVarInt();
                 avatar.unknownFlag = reader.readVarInt();
-                avatar.isPng = false;
                 if (i < model.metadata.authors.size()) {
                     model.metadata.authors.get(i).avatar = avatar.name;
                     model.metadata.authors.get(i).avatarImage = avatar;

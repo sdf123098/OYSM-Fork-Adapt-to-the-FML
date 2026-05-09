@@ -5,9 +5,11 @@ import com.elfmcys.yesstevemodel.forge.client.gui.TouhouMaidModelScreen;
 import com.github.tartaricacid.touhoulittlemaid.compat.ysm.event.OpenYsmMaidScreenEvent;
 import net.minecraft.client.Minecraft;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
-
+@OnlyIn(Dist.CLIENT)
 public final class MaidScreenEvent {
     @SubscribeEvent
     public void onOpenMaidScreen(OpenYsmMaidScreenEvent event) {

@@ -6,10 +6,12 @@ import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
-
+@OnlyIn(Dist.CLIENT)
 public final class MaidCapabilityEvent {
 
     private static final ResourceLocation CAPABILITY_KEY = new ResourceLocation(YesSteveModel.MOD_ID, "ysm_maid");

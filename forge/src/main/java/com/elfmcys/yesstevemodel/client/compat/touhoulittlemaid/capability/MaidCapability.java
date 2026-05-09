@@ -12,11 +12,13 @@ import com.github.tartaricacid.touhoulittlemaid.geckolib3.geo.IGeoEntity;
 import com.github.tartaricacid.touhoulittlemaid.geckolib3.geo.animated.ILocationModel;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.function.Consumer;
 
-
+@OnlyIn(Dist.CLIENT)
 public class MaidCapability extends LivingAnimatable<EntityMaid> implements IGeoEntity {
 
     private MaidModelInfo maidModelInfo;

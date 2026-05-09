@@ -17,9 +17,6 @@ public final class ClientPlayerJoinNotification {
     }
 
     public static void register() {
-        if (PlatformAPI.isServer()) {
-            return;
-        }
         ClientPlayerEvent.CLIENT_PLAYER_JOIN.register(ClientPlayerJoinNotification::onPlayerJoin);
         ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(ClientPlayerJoinNotification::onPlayerQuit);
     }

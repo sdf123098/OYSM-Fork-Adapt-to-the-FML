@@ -13,6 +13,7 @@ import com.elfmcys.yesstevemodel.client.input.ExtraPlayerRenderKey;
 import com.elfmcys.yesstevemodel.client.input.InputStateKey;
 import com.elfmcys.yesstevemodel.client.input.PlayerModelToggleKey;
 import com.elfmcys.yesstevemodel.client.renderer.RendererManager;
+import rip.ysm.api.PlatformAPI;
 
 public final class YsmEventBootstrap {
 
@@ -25,22 +26,26 @@ public final class YsmEventBootstrap {
         PlayerLogoutEvent.register();
         CommonEvent.register();
         CommandRegistry.register();
-        EntityJoinCallbackEvent.register();
+
         CapabilityEvent.register();
 
-        ClientSetupEvent.register();
-        ClientTickEvent.register();
-        ClientPlayerJoinNotification.register();
-        ClientPlayerCloneEvent.register();
-        AnimationLockEvent.register();
-        PlayerSkinTextureManager.register();
-        RendererManager.register();
+        if (!PlatformAPI.isServer()) {
+            EntityJoinCallbackEvent.register();
 
-        PlayerModelToggleKey.register();
-        AnimationRouletteKey.register();
-        DebugAnimationKey.register();
-        ExtraPlayerRenderKey.register();
-        ExtraAnimationKey.register();
-        InputStateKey.register();
+            ClientSetupEvent.register();
+            ClientTickEvent.register();
+            ClientPlayerJoinNotification.register();
+            ClientPlayerCloneEvent.register();
+            AnimationLockEvent.register();
+            PlayerSkinTextureManager.register();
+            RendererManager.register();
+            PlayerModelToggleKey.register();
+            AnimationRouletteKey.register();
+            DebugAnimationKey.register();
+            ExtraPlayerRenderKey.register();
+            ExtraAnimationKey.register();
+            InputStateKey.register();
+        }
+
     }
 }

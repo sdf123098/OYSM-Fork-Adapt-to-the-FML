@@ -18,9 +18,12 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
 import com.mojang.math.Axis;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 
 
 @SuppressWarnings("removal")
+@OnlyIn(Dist.CLIENT)
 public class SlashBladeRenderer {
 
     private static final ResourceLocation BLADE_OBJ = new ResourceLocation("slashblade", "model/blade.obj");

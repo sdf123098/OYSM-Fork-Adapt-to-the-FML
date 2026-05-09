@@ -2,6 +2,9 @@ package com.elfmcys.yesstevemodel.network.message;
 
 import com.elfmcys.yesstevemodel.capability.AuthModelsCapability;
 import com.google.common.collect.Sets;
+import dev.architectury.injectables.annotations.PlatformOnly;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import rip.ysm.api.network.PacketContext;
@@ -39,7 +42,8 @@ public class S2CSyncAuthModelsPacket {
         }
     }
 
-    
+
+    @Environment(EnvType.CLIENT)
     public static void handleCapability(S2CSyncAuthModelsPacket message) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {

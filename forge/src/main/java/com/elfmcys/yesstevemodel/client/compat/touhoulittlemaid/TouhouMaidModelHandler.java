@@ -18,6 +18,8 @@ import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;
@@ -27,7 +29,7 @@ public class TouhouMaidModelHandler {
         return entity instanceof EntityMaid;
     }
 
-    
+    @OnlyIn(Dist.CLIENT)
     public static void executeMaidMolang(Entity entity, String str) {
         if (!(entity instanceof EntityMaid entityMaid)) {
             return;

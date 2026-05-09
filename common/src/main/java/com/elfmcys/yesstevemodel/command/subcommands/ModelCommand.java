@@ -113,6 +113,7 @@ public class ModelCommand {
     }
 
     private static int reloadAllPack(CommandContext<CommandSourceStack> context) {
+        context.getSource().sendSuccess(() -> Component.translatable("message.yes_steve_model.model.reload.start"), true);
         StopWatch watch = StopWatch.createStarted();
         if (!ServerModelManager.loadModels(result -> {
             if (result.getErrorMessage() != null) {
@@ -141,7 +142,6 @@ public class ModelCommand {
             context.getSource().sendFailure(Component.translatable("message.yes_steve_model.model.reload.in_progress"));
             return Command.SINGLE_SUCCESS;
         }
-        context.getSource().sendSuccess(() -> Component.translatable("message.yes_steve_model.model.reload.start"), true);
         return Command.SINGLE_SUCCESS;
     }
 

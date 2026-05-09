@@ -5,6 +5,8 @@ import com.elfmcys.yesstevemodel.network.message.FeedbackData;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.ModList;
 
@@ -47,7 +49,7 @@ public class TouhouMaidCompat {
         }
     }
 
-    
+    @OnlyIn(Dist.CLIENT)
     public static void playMaidAnimation(Entity entity, String str) {
         if (isLoaded()) {
             TouhouMaidModelHandler.executeMaidMolang(entity, str);

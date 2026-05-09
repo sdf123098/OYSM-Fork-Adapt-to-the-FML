@@ -21,9 +21,6 @@ public final class ClientSetupEvent {
     }
 
     public static void register() {
-        if (PlatformAPI.isServer()) {
-            return;
-        }
         registerKeyMappings();
         if (YesSteveModel.isAvailable()) {
             AnimationRegister.registerAnimationState();

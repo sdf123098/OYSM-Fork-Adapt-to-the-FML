@@ -20,6 +20,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.stream.Stream;
 import javax.imageio.ImageIO;
@@ -82,7 +83,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             }
 
             if (data != null && !readFilesMd5Map.containsKey(normalizedPath)) {
-                readFilesMd5Map.put(normalizedPath, DigestUtils.md5Hex(data));
+                readFilesMd5Map.put(normalizedPath, md5Hex(data)); // fabric服务端找不到apache codec DigestUtils
             }
             return data;
 
@@ -164,7 +165,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
                             img.format = meta.format();
                             img.name = author.name;
                             img.data = avatarData;
-                            img.isPng = (meta.format() == 2);
                             img.unknownFlag = 1;
 
                             author.avatar = avatarPath;
@@ -267,7 +267,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
             img.format = meta.format();
             img.name = id;
             img.data = data;
-            img.isPng = (meta.format() == 2);
             img.unknownFlag = 1;
             model.properties.backgroundImages.add(img);
         }
@@ -302,7 +301,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 if (texData != null) {
                     ImageMeta meta = parseImageMeta(texData, texPath);
                     RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-                    rt.hash = DigestUtils.sha256Hex(texData); // 计算原始数据的 hash
+                    rt.hash = sha256Hex(texData); // 计算原始数据的 hash
                     rt.width = meta.width();
                     rt.height = meta.height();
                     rt.imageFormat = meta.format();
@@ -320,7 +319,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                                 sub.specularType = 2;
                                 sub.data = spData;
                                 sub.unknownFlag = 1;
-                                sub.hash = DigestUtils.sha256Hex(spData);
+                                sub.hash = sha256Hex(spData);
                                 sub.width = spMeta.width();
                                 sub.height = spMeta.height();
                                 sub.imageFormat = spMeta.format();
@@ -335,7 +334,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                                 sub.specularType = 1;
                                 sub.data = nrData;
                                 sub.unknownFlag = 1;
-                                sub.hash = DigestUtils.sha256Hex(nrData);
+                                sub.hash = sha256Hex(nrData);
                                 sub.width = nrMeta.width();
                                 sub.height = nrMeta.height();
                                 sub.imageFormat = nrMeta.format();
@@ -354,7 +353,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 byte[] animData = readResource(entry.getValue().getAsString());
                 if (animData != null) {
                     RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
-                    raf.fileHash = DigestUtils.sha256Hex(animData);
+                    raf.fileHash = sha256Hex(animData);
                     raf.animType = getAnimTypeFromKey(entry.getKey());
                     model.mainEntity.animationFiles.put(entry.getKey(), raf);
                 }
@@ -365,7 +364,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 String acPath = acElem.getAsString();
                 byte[] acData = readResource(acPath);
                 if (acData != null) {
-                    String acHash = DigestUtils.sha256Hex(acData);
+                    String acHash = sha256Hex(acData);
                     RawYsmModel.RawAnimationControllerFile acFile = new RawYsmModel.RawAnimationControllerFile();
                     acFile.name = extractFileName(acPath);
                     acFile.hash = acHash;
@@ -423,7 +422,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                     ImageMeta meta = parseImageMeta(texData, texPath);
                     RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
 
-                    rt.hash = DigestUtils.sha256Hex(texData);
+                    rt.hash = sha256Hex(texData);
                     rt.width = meta.width();
                     rt.height = meta.height();
                     rt.imageFormat = meta.format();
@@ -439,7 +438,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 byte[] animData = readResource(item.get("animation").getAsString());
                 if (animData != null) {
                     RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
-                    raf.fileHash = DigestUtils.sha256Hex(animData);
+                    raf.fileHash = sha256Hex(animData);
                     raf.animType = getAnimTypeFromKey("extra");
                     sub.animationFiles.put("sub_anim", raf);
                 }
@@ -449,7 +448,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 String acPath = item.get("controller").getAsString();
                 byte[] acData = readResource(acPath);
                 if (acData != null) {
-                    String acHash = DigestUtils.sha256Hex(acData);
+                    String acHash = sha256Hex(acData);
                     RawYsmModel.RawAnimationControllerFile acFile = new RawYsmModel.RawAnimationControllerFile();
                     acFile.name = extractFileName(acPath);
                     acFile.hash = acHash;
@@ -471,7 +470,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
         JsonObject geoObj = geometries.get(0).getAsJsonObject();
         RawYsmModel.RawGeometry geo = new RawYsmModel.RawGeometry();
-        geo.sha256 = DigestUtils.sha256Hex(data);
+        geo.sha256 = sha256Hex(data);
 
         geo.modelType = modelType;
         geo.unkFloat1 = 0.7f;
@@ -490,6 +489,10 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 for (int i = 0; i < offsetArr.size(); i++) geo.visibleBoundsOffset[i] = offsetArr.get(i).getAsFloat();
             } else {
                 geo.visibleBoundsOffset = new float[0];
+            }
+
+            if (modelType == 1 && desc.has("ysm_extra_info")) { // legacy
+                parseLegacyMetadata(desc.getAsJsonObject("ysm_extra_info"), false);
             }
         }
 
@@ -897,13 +900,13 @@ public class YSMFolderDeserializer implements AutoCloseable {
     private void processGlobalResourceFile(String relativePath, byte[] data) {
         if (relativePath.startsWith("sounds/") || relativePath.endsWith(".ogg")) {
             String soundName = extractFileName(relativePath);
-            String hash = DigestUtils.sha256Hex(data);
+            String hash = sha256Hex(data);
             model.soundFiles.put(soundName, new RawYsmModel.RawDataFile(hash, data));
         }
         else if (relativePath.startsWith("lang/") && relativePath.endsWith(".json")) {
             String locale = relativePath.substring("lang/".length(), relativePath.length() - 5);
             try {
-                String hash = DigestUtils.sha256Hex(data);
+                String hash = sha256Hex(data);
                 String langJsonStr = new String(data, StandardCharsets.UTF_8);
                 JsonObject langJson = JsonParser.parseString(langJsonStr).getAsJsonObject();
                 Map<String, String> langMap = new LinkedHashMap<>();
@@ -917,7 +920,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
         }
         else if (relativePath.startsWith("functions/") && relativePath.endsWith(".molang")) {
             String fnName = extractFileName(relativePath);
-            String hash = DigestUtils.sha256Hex(data);
+            String hash = sha256Hex(data);
             model.functionFiles.put(fnName, new RawYsmModel.RawDataFile(hash, data));
         }
     }
@@ -1110,30 +1113,10 @@ public class YSMFolderDeserializer implements AutoCloseable {
         if (infoData != null) {
             try {
                 JsonObject infoObj = JsonParser.parseString(new String(infoData, StandardCharsets.UTF_8)).getAsJsonObject();
-                model.metadata.name = getStr(infoObj, "name", "");
-                model.metadata.tips = getStr(infoObj, "tips", "");
-                model.metadata.licenseDescription = getStr(infoObj, "license", "");
-                model.properties.isFree = getBool(infoObj, "free", false);
-
-                if (infoObj.has("authors") && infoObj.get("authors").isJsonArray()) {
-                    for (JsonElement e : infoObj.getAsJsonArray("authors")) {
-                        RawYsmModel.RawMetadata.Author author = new RawYsmModel.RawMetadata.Author();
-                        author.name = e.getAsString();
-                        model.metadata.authors.add(author);
-                    }
-                }
-
-                if (infoObj.has("extra_animation_names") && infoObj.get("extra_animation_names").isJsonArray()) {
-                    JsonArray extras = infoObj.getAsJsonArray("extra_animation_names");
-                    for (int i = 0; i < extras.size(); i++) {
-                        String extraName = extras.get(i).getAsString();
-                        model.properties.extraAnimations.put("extra" + i, extraName);
-
-                    }
-                }
+                parseLegacyMetadata(infoObj, true);
             } catch (Exception e) {
                 System.err.println("Failed to parse info.json");
-                e.printStackTrace();;
+                e.printStackTrace();
             }
         }
 
@@ -1146,7 +1129,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             if (texData != null) {
                 ImageMeta meta = parseImageMeta(texData, texName);
                 RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-                rt.hash = DigestUtils.sha256Hex(texData);
+                rt.hash = sha256Hex(texData);
                 rt.width = meta.width();
                 rt.height = meta.height();
                 rt.imageFormat = meta.format();
@@ -1166,7 +1149,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             byte[] animData = readResource(fileName);
             if (animData != null) {
                 RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
-                raf.fileHash = DigestUtils.sha256Hex(animData);
+                raf.fileHash = sha256Hex(animData);
 
                 String animKey = fileName.substring(0, fileName.length() - ".animation.json".length());
                 raf.animType = getAnimTypeFromKey(animKey);
@@ -1184,7 +1167,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             if (arrowTexData != null) {
                 ImageMeta meta = parseImageMeta(arrowTexData, "arrow.png");
                 RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-                rt.hash = DigestUtils.sha256Hex(arrowTexData);
+                rt.hash = sha256Hex(arrowTexData);
                 rt.width = meta.width();
                 rt.height = meta.height();
                 rt.imageFormat = meta.format();
@@ -1197,7 +1180,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             byte[] arrowAnimData = readResource("arrow.animation.json");
             if (arrowAnimData != null) {
                 RawYsmModel.RawAnimationFile raf = parseAnimations(arrowAnimData);
-                raf.fileHash = DigestUtils.sha256Hex(arrowAnimData);
+                raf.fileHash = sha256Hex(arrowAnimData);
                 raf.animType = getAnimTypeFromKey("arrow");
                 arrowSub.animationFiles.put("sub_anim", raf);
             }
@@ -1214,5 +1197,69 @@ public class YSMFolderDeserializer implements AutoCloseable {
             return true;
         }
         return Files.isRegularFile(dir.resolve("main.json")) && Files.isRegularFile(dir.resolve("arm.json"));
+    }
+
+    private void parseLegacyMetadata(JsonObject infoObj, boolean overwrite) {
+        if (infoObj == null) return;
+        if (infoObj.has("name") && (overwrite || model.metadata.name.isEmpty())) {
+            model.metadata.name = getStr(infoObj, "name", "");
+        }
+        if (infoObj.has("tips") && (overwrite || model.metadata.tips.isEmpty())) {
+            model.metadata.tips = getStr(infoObj, "tips", "");
+        }
+        if (infoObj.has("license") && (overwrite || model.metadata.licenseDescription.isEmpty())) {
+            model.metadata.licenseDescription = getStr(infoObj, "license", "");
+        }
+        if (infoObj.has("free")) {
+            if (overwrite || !model.properties.isFree) {
+                model.properties.isFree = getBool(infoObj, "free", false);
+            }
+        }
+
+        if (infoObj.has("authors") && infoObj.get("authors").isJsonArray()) {
+            if (overwrite || model.metadata.authors.isEmpty()) {
+                model.metadata.authors.clear();
+                for (JsonElement e : infoObj.getAsJsonArray("authors")) {
+                    RawYsmModel.RawMetadata.Author author = new RawYsmModel.RawMetadata.Author();
+                    author.name = e.getAsString();
+                    model.metadata.authors.add(author);
+                }
+            }
+        }
+
+        if (infoObj.has("extra_animation_names") && infoObj.get("extra_animation_names").isJsonArray()) {
+            if (overwrite || model.properties.extraAnimations.isEmpty()) {
+                model.properties.extraAnimations.clear();
+                JsonArray extras = infoObj.getAsJsonArray("extra_animation_names");
+                for (int i = 0; i < extras.size(); i++) {
+                    String extraName = extras.get(i).getAsString();
+                    model.properties.extraAnimations.put("extra" + i, extraName);
+                }
+            }
+        }
+    }
+
+
+    // fabric WHY java.lang.NoClassDefFoundError: org/apache/commons/codec/digest/DigestUtils
+    static final char[] DIGITS_LOWER = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    public static String md5Hex(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("MD5");
+            return encodeHex(digest.digest(data));
+        } catch (NoSuchAlgorithmException e) {throw new RuntimeException(e);}
+    }
+    public static String sha256Hex(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return encodeHex(digest.digest(data));
+        } catch (NoSuchAlgorithmException e) {throw new RuntimeException(e);}
+    }
+    private static String encodeHex(byte[] hashBytes) {
+        char[] out = new char[hashBytes.length << 1];
+        for (int i = 0, j = 0; i < hashBytes.length; i++) {
+            out[j++] = DIGITS_LOWER[(0xF0 & hashBytes[i]) >>> 4];
+            out[j++] = DIGITS_LOWER[0x0F & hashBytes[i]];
+        }
+        return new String(out);
     }
 }

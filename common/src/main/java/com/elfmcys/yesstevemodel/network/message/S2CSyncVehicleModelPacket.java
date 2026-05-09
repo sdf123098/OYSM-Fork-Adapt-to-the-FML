@@ -6,6 +6,8 @@ import com.elfmcys.yesstevemodel.event.EntityJoinCallbackEvent;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.entity.Entity;
@@ -53,7 +55,7 @@ public class S2CSyncVehicleModelPacket {
         }
     }
 
-    
+    @Environment(EnvType.CLIENT)
     public static void handleCapability(Entity entity, VehicleModelCapability capability, Int2FloatOpenHashMap floatMap) {
         VehicleCapability.get(entity).ifPresent(vehicleCapability -> {
             vehicleCapability.setOwnerModelId(capability.getOwnerModelId());

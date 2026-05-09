@@ -7,6 +7,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
@@ -24,7 +26,7 @@ import org.joml.Vector3d;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-
+@Environment(EnvType.CLIENT)
 public class ParticleEffectUtil {
     private static final Cache<String, ParticleOptions> particleCache = CacheBuilder.newBuilder().expireAfterAccess(60, TimeUnit.SECONDS).build();
 

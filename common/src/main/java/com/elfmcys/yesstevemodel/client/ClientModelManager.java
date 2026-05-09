@@ -14,6 +14,8 @@ import com.elfmcys.yesstevemodel.resource.*;
 import com.elfmcys.yesstevemodel.resource.pojo.RawYsmModel;
 import com.elfmcys.yesstevemodel.resource.models.ModelPackData;
 import com.elfmcys.yesstevemodel.util.data.OrderedStringMap;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import rip.ysm.security.YSMClientCache;
 import rip.ysm.security.YsmCrypt;
 import com.elfmcys.yesstevemodel.util.*;
@@ -43,6 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
+@Environment(EnvType.CLIENT)
 public class ClientModelManager {
     private static int syncStep = 1;
     private static byte[] key1;
@@ -124,7 +127,7 @@ public class ClientModelManager {
             ClientModelInfo  parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, "default");
 
 
-                onModelDataReceived(parsedBundle, "default", true, false);
+            onModelDataReceived(parsedBundle, "default", true, false);
                 YesSteveModel.LOGGER.info("[YSM] Successfully pushed Default Model to render queue.");
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[YSM] Failed to dispatch Default Model", e);

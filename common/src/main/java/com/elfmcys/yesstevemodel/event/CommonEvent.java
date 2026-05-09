@@ -2,6 +2,7 @@ package com.elfmcys.yesstevemodel.event;
 
 import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.client.ClientModelManager;
+import rip.ysm.api.PlatformAPI;
 import rip.ysm.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.elfmcys.yesstevemodel.model.ServerModelManager;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
@@ -15,7 +16,7 @@ public final class CommonEvent {
     }
 
     public static Object nativeInit() {
-        ClientModelManager.loadDefaultModel();
+        if (!PlatformAPI.isServer()) ClientModelManager.loadDefaultModel();
         try {
             ServerModelManager.reloadPacks();
         } catch (IOException e) {

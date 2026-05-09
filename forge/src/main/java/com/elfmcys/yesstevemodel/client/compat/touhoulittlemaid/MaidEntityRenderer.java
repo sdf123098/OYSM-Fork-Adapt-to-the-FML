@@ -20,11 +20,14 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Set;
 
+@OnlyIn(Dist.CLIENT)
 public class MaidEntityRenderer extends GeoReplacedEntityRenderer<EntityMaid, MaidCapability> implements IGeoEntityRenderer<EntityMaid> {
     private static final Set<EntityType> CUSTOM_RIDERS = Set.of(EntityType.MINECART, EntityType.BOAT, InitEntities.BROOM.get());
     public final List<GeoLayerRenderer<EntityMaid, MaidEntityRenderer>> maidLayerRenderer;

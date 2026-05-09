@@ -14,9 +14,6 @@ public final class ClientPlayerCloneEvent {
     }
 
     public static void register() {
-        if (PlatformAPI.isServer()) {
-            return;
-        }
         ClientPlayerEvent.CLIENT_PLAYER_RESPAWN.register(ClientPlayerCloneEvent::onClientPlayerRespawn);
     }
 

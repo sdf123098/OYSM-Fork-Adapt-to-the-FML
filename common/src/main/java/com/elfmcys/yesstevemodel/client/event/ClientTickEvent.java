@@ -19,9 +19,6 @@ public final class ClientTickEvent {
     }
 
     public static void register() {
-        if (PlatformAPI.isServer()) {
-            return;
-        }
         dev.architectury.event.events.client.ClientTickEvent.CLIENT_PRE.register(ClientTickEvent::onClientPreTick);
     }
 
