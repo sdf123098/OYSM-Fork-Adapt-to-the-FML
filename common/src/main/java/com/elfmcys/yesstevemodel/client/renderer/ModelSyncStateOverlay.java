@@ -3,13 +3,22 @@ package com.elfmcys.yesstevemodel.client.renderer;
 import com.elfmcys.yesstevemodel.client.ClientModelManager;
 import com.elfmcys.yesstevemodel.config.LoadingStateConfig;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import rip.ysm.api.client.HudOverlay;
 
 public class ModelSyncStateOverlay implements HudOverlay {
+
+    private static final int BAR_WIDTH = 150;
+    private static final int BAR_HEIGHT = 10;
+    private static final int BAR_BG = 0xFF555555;
+
+    private static float animatedProgress = 0.0f;
+    private static long lastFrameNanos = 0L;
+    private static float shimmerPhase = 0.0f;
+
     @Override
     public void render(GuiGraphics guiGraphics, Font font, float partialTick, int screenWidth, int screenHeight) {
         int textX;
@@ -75,8 +84,9 @@ public class ModelSyncStateOverlay implements HudOverlay {
                 int totalModelCount = loadedModelCount + pendingModelCount;
                 MutableComponent loadingText = Component.translatable("gui.yes_steve_model.sync_hint.title").append(Component.translatable("gui.yes_steve_model.sync_hint.loading_models", pendingModelCount, totalModelCount).withStyle(ChatFormatting.YELLOW));
                 renderSyncText(font, guiGraphics, loadingText, textX, textY, screenWidth);
-                guiGraphics.fill(barX, barY, barX + 150, barY + 10, -11184811);
-                guiGraphics.fill(barX, barY, barX + (150 * (loadedModelCount / totalModelCount)), barY + 10, -256);
+                drawAnimatedBar(guiGraphics, barX, barY, (float) loadedModelCount / totalModelCount, 0xFFFFD11A, true);
+            } else {
+                resetAnimation();
             }
             return;
         }
@@ -86,25 +96,68 @@ public class ModelSyncStateOverlay implements HudOverlay {
         switch (syncStatus.getCurrentState()) {
             case WAITING:
                 prefixText.append(Component.translatable("gui.yes_steve_model.sync_hint.waiting").withStyle(ChatFormatting.AQUA));
+                resetAnimation();
                 break;
             case LOADING:
                 prefixText.append(Component.translatable("gui.yes_steve_model.sync_hint.loading").withStyle(ChatFormatting.GOLD));
+                resetAnimation();
                 break;
             case PREPARING:
                 prefixText.append(Component.translatable("gui.yes_steve_model.sync_hint.preparing").withStyle(ChatFormatting.LIGHT_PURPLE));
+                resetAnimation();
                 break;
             case SYNCING:
                 if (syncStatus.getSyncedModels() == 0) {
                     prefixText.append(Component.translatable("gui.yes_steve_model.sync_hint.syncing").withStyle(ChatFormatting.RED));
+                    resetAnimation();
                 } else {
                     prefixText.append(Component.literal(String.format("%s/%s", syncStatus.getSyncedModels(), syncStatus.getTotalModels())).withStyle(ChatFormatting.GREEN));
-                    guiGraphics.fill(barX, barY, barX + 150, barY + 10, -11184811);
-                    int progressWidth = (int) (150.0f * ((float) syncStatus.getSyncedModels() / syncStatus.getTotalModels()));
-                    guiGraphics.fill(barX, barY, barX + progressWidth, barY + 10, -16711936);
+                    drawAnimatedBar(guiGraphics, barX, barY, (float) syncStatus.getSyncedModels() / syncStatus.getTotalModels(), 0xFF55FF55, true);
                 }
                 break;
         }
         renderSyncText(font, guiGraphics, prefixText, textX, textY, screenWidth);
+    }
+
+    private static void drawAnimatedBar(GuiGraphics g, int x, int y, float target, int fgColor, boolean shimmer) {
+        long now = System.nanoTime();
+        if (lastFrameNanos == 0L) lastFrameNanos = now;
+        float dt = Math.min(0.1f, (now - lastFrameNanos) / 1.0e9f);
+        lastFrameNanos = now;
+        float lerp = 1.0f - (float) Math.exp(-dt * 12.0f);
+        target = Math.max(0.0f, Math.min(1.0f, target));
+        animatedProgress += (target - animatedProgress) * lerp;
+        if (Math.abs(target - animatedProgress) < 0.001f) animatedProgress = target;
+        shimmerPhase = (shimmerPhase + dt * 1.2f) % 1.0f;
+
+        g.fill(x, y, x + BAR_WIDTH, y + BAR_HEIGHT, BAR_BG);
+        int fillW = Math.round(animatedProgress * BAR_WIDTH);
+        if (fillW > 0) {
+            g.fill(x, y, x + fillW, y + BAR_HEIGHT, fgColor);
+            int highlight = (fgColor & 0x00FFFFFF) | 0x60000000;
+            g.fill(x, y, x + fillW, y + 1, lighten(fgColor));
+            if (shimmer && fillW > 8) {
+                int shimmerX = x + Math.round(shimmerPhase * fillW);
+                int shimmerW = Math.min(12, fillW - (shimmerX - x));
+                if (shimmerW > 0) {
+                    g.fill(shimmerX, y, shimmerX + shimmerW, y + BAR_HEIGHT, highlight);
+                }
+            }
+        }
+    }
+
+    private static int lighten(int argb) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = Math.min(255, ((argb >> 16) & 0xFF) + 60);
+        int gn = Math.min(255, ((argb >> 8) & 0xFF) + 60);
+        int b = Math.min(255, (argb & 0xFF) + 60);
+        return (a << 24) | (r << 16) | (gn << 8) | b;
+    }
+
+    private static void resetAnimation() {
+        animatedProgress = 0.0f;
+        lastFrameNanos = 0L;
+        shimmerPhase = 0.0f;
     }
 
     private void renderSyncText(Font font, GuiGraphics guiGraphics, MutableComponent textComponent, int baseX, int textY, int screenWidth) {

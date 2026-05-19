@@ -42,10 +42,9 @@ void main() {
     vec4 overlayColor = texelFetch(Sampler1, ivec2(oU, oV), 0);
     color.rgb = mix(overlayColor.rgb, color.rgb, overlayColor.a);
 
-    int blockL = (v_packedLight >> 4) & 0xF;
-    int skyL   = (v_packedLight >> 20) & 0xF;
-    vec2 lightUV = clamp(vec2(float(blockL), float(skyL)) / 16.0, vec2(0.5 / 16.0), vec2(15.5 / 16.0));
-    vec4 lightColor = texture(Sampler2, lightUV);
+    int blockUV = (v_packedLight & 0xFFFF) / 16;
+    int skyUV   = ((v_packedLight >> 16) & 0xFFFF) / 16;
+    vec4 lightColor = texelFetch(Sampler2, ivec2(blockUV, skyUV), 0);
     color.rgb *= lightColor.rgb;
 
     fragColor = linearFog(color, v_vertexDistance, u_fogStart, u_fogEnd, u_fogColor);

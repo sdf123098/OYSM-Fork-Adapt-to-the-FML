@@ -10,6 +10,7 @@ public final class BoneXformCompute {
     private static int program = 0;
     private static int locColor = -1;
     private static int locOverlay = -1;
+    private static int locModelView = -1;
     private static boolean failed = false;
 
     public static synchronized boolean ensureCompiled() {
@@ -23,6 +24,7 @@ public final class BoneXformCompute {
 
             locColor = GL20.glGetUniformLocation(prog, "u_color");
             locOverlay = GL20.glGetUniformLocation(prog, "u_packedOverlay");
+            locModelView = GL20.glGetUniformLocation(prog, "u_modelView");
 
             program = prog;
             return true;
@@ -45,6 +47,7 @@ public final class BoneXformCompute {
     public static int locOverlay() {
         return locOverlay;
     }
+    public static int locModelView() { return locModelView; } // 新增 getter
 
     public static int dispatchGroupCount(int vertexCount) {
         return (vertexCount + 64 - 1) / 64;

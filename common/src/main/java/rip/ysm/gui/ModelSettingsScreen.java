@@ -30,6 +30,7 @@ import org.joml.Quaternionf;
 import rip.ysm.gui.components.BooleanOptionRow;
 import rip.ysm.gui.components.RadioOptionRow;
 import rip.ysm.gui.components.SliderOptionRow;
+import rip.ysm.gui.components.groups.IdentifiedGroup;
 import rip.ysm.gui.molang.MolangOption;
 
 import java.util.ArrayList;
@@ -78,8 +79,21 @@ public class ModelSettingsScreen extends OptionScreen {
     }
 
     @Override
+    protected boolean shouldUseCompactTabs() {
+        return this.width < 620;
+    }
+
+    @Override
     protected int computeRowAreaRight() {
-        return panelRight - 200 - 4;
+        return panelRight - previewWidth() - 4;
+    }
+
+    private int previewWidth() {
+        if (compactTabs) {
+            int panelW = panelRight - panelLeft;
+            return Mth.clamp(panelW / 3, 110, 180);
+        }
+        return 200;
     }
 
     @Override
@@ -95,8 +109,8 @@ public class ModelSettingsScreen extends OptionScreen {
         undoBtn.active = false;
         saveBtn.setMessage(Component.translatable("gui.yes_steve_model.config.done"));
         saveBtn.setX(panelRight - saveBtn.getWidth());
-        previewLeft = panelRight - 200;
-        previewTop = panelTop + 6 + 18;
+        previewLeft = panelRight - previewWidth();
+        previewTop = rowAreaTop;
         previewRight = panelRight;
         previewBottom = panelBottom - 60;
         if (initialGroupId != null) {
@@ -115,7 +129,7 @@ public class ModelSettingsScreen extends OptionScreen {
     }
 
     @Override
-    protected void collectBlurRegions(java.util.List<int[]> out) {
+    protected void collectBlurRegions(List<int[]> out) {
         super.collectBlurRegions(out);
         out.add(new int[]{previewLeft, previewTop, previewRight - previewLeft, previewBottom - previewTop});
     }
@@ -298,19 +312,4 @@ public class ModelSettingsScreen extends OptionScreen {
         return mouseX >= previewLeft && mouseX < previewRight && mouseY >= previewTop && mouseY < previewBottom;
     }
 
-    private static final class IdentifiedGroup extends OptionGroup {
-        private final String id;
-        private final String displayLabel;
-
-        private IdentifiedGroup(String id, String displayLabel) {
-            super(id);
-            this.id = id;
-            this.displayLabel = displayLabel;
-        }
-
-        @Override
-        public Component getTitle() {
-            return Component.literal(displayLabel);
-        }
-    }
 }

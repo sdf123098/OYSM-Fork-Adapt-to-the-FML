@@ -1,7 +1,9 @@
 package com.elfmcys.yesstevemodel.client.compat.carryon;
 
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.levelgen.structure.structures.EndCityPieces;
 import tschipp.carryon.common.carry.CarryOnData;
 import tschipp.carryon.common.carry.CarryOnDataManager;
 
@@ -14,8 +16,8 @@ public class CarryOnDataHelper {
     }
 
     public static boolean isPlayerCarrying(LivingEntity livingEntity) {
-        Player vehicle = (Player) livingEntity.getVehicle();
-        return (vehicle instanceof Player) && getCarryType(vehicle) == CarryType.PLAYER;
+        Entity vehicle = livingEntity.getVehicle();
+        return (vehicle instanceof Player player) && getCarryType(player) == CarryType.PLAYER;
     }
 
     public static CarryType getCarryType(Player player) {

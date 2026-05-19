@@ -1,21 +1,21 @@
 package com.elfmcys.yesstevemodel.client.model;
 
 import com.elfmcys.yesstevemodel.client.ClientModelInfo;
-import com.elfmcys.yesstevemodel.client.texture.OuterFileTexture;
+import com.elfmcys.yesstevemodel.client.animation.condition.ArmorConditions;
 import com.elfmcys.yesstevemodel.client.animation.condition.ConditionManager;
+import com.elfmcys.yesstevemodel.client.gui.metadata.ModelDisplayAssets;
+import com.elfmcys.yesstevemodel.client.texture.OuterFileTexture;
 import com.elfmcys.yesstevemodel.geckolib3.core.builder.Animation;
+import com.elfmcys.yesstevemodel.geckolib3.core.builder.AnimationController;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.IValue;
-import com.elfmcys.yesstevemodel.geckolib3.file.VehicleModelFiles;
-import com.elfmcys.yesstevemodel.client.gui.metadata.ModelDisplayAssets;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
-import com.elfmcys.yesstevemodel.resource.models.Metadata;
-import com.elfmcys.yesstevemodel.client.animation.condition.ArmorConditions;
-import com.elfmcys.yesstevemodel.geckolib3.core.builder.AnimationController;
 import com.elfmcys.yesstevemodel.geckolib3.file.AnimationControllerFile;
 import com.elfmcys.yesstevemodel.geckolib3.file.AnimationFile;
-import com.elfmcys.yesstevemodel.util.FileTypeUtil;
 import com.elfmcys.yesstevemodel.geckolib3.file.ProjectileModelFiles;
+import com.elfmcys.yesstevemodel.geckolib3.file.VehicleModelFiles;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.resource.models.Metadata;
+import com.elfmcys.yesstevemodel.util.FileTypeUtil;
 import it.unimi.dsi.fastutil.objects.*;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.resources.ResourceLocation;
@@ -52,10 +52,13 @@ public class ModelAssemblyFactory {
         MainModelData hierarchyData = clientModelInfo.getMainModelData();
         GeoModel mainModel = hierarchyData.getModels().get(0);
         GeoModel armModel = hierarchyData.getModels().get(1);
-        Object2ReferenceOpenHashMap<String, Animation> object2ReferenceOpenHashMap = new Object2ReferenceOpenHashMap<>();
-        Object2ReferenceOpenHashMap<String, Animation> armAnimations = new Object2ReferenceOpenHashMap<>();
+        Object2ReferenceLinkedOpenHashMap<String, Animation> object2ReferenceOpenHashMap = new Object2ReferenceLinkedOpenHashMap<>();
+        Object2ReferenceLinkedOpenHashMap<String, Animation> armAnimations = new Object2ReferenceLinkedOpenHashMap<>();
         for (String str : hierarchyData.getAnimations().keySet()) {
             AnimationFile animationFile = hierarchyData.getAnimations().get(str);
+            for (Animation animation : animationFile.getAnimations().values()) {
+                if (animation.sourceKey == null) animation.sourceKey = str;
+            }
             if (FIRST_PERSON_ARM_BONE.equals(str)) {
                 armAnimations.putAll(animationFile.getAnimations());
             } else {

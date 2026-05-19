@@ -27,9 +27,8 @@ import com.elfmcys.yesstevemodel.client.compat.slashblade.SlashBladeCompat;
 import com.elfmcys.yesstevemodel.client.compat.swem.SWEMCompat;
 import com.elfmcys.yesstevemodel.client.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.elfmcys.yesstevemodel.client.renderer.AnimationDebugOverlay;
-import com.elfmcys.yesstevemodel.client.renderer.LoadingStateOverlay;
+import com.elfmcys.yesstevemodel.client.renderer.ExtraPlayerOverlay;
 import com.elfmcys.yesstevemodel.client.renderer.ModelSyncStateOverlay;
-import rip.ysm.api.client.HudOverlay;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
@@ -41,6 +40,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.loading.LoadingModList;
 import org.apache.commons.lang3.tuple.Pair;
+import rip.ysm.api.client.HudOverlay;
 
 import java.util.Optional;
 
@@ -94,7 +94,7 @@ public final class ForgeClientSetupHooks {
             return;
         }
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();
-        HudOverlay loadingOverlay = new LoadingStateOverlay();
+        HudOverlay loadingOverlay = new ExtraPlayerOverlay();
         HudOverlay syncOverlay = new ModelSyncStateOverlay();
         event.registerAbove(VanillaGuiOverlay.DEBUG_TEXT.id(), "ysm_debug_info", (gui, gfx, partial, w, h) -> debugOverlay.render(gfx, gui.getFont(), partial, w, h));
         event.registerAbove(VanillaGuiOverlay.DEBUG_TEXT.id(), "ysm_extra_player", (gui, gfx, partial, w, h) -> loadingOverlay.render(gfx, gui.getFont(), partial, w, h));

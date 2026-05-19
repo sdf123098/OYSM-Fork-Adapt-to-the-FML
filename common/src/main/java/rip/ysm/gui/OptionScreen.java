@@ -45,12 +45,15 @@ public abstract class OptionScreen extends Screen {
     protected int rowScrollOffset;
     protected float rowScrollDisplay;
     protected int maxRowScroll;
-    private int rowContentHeight;
+    protected int rowContentHeight;
 
     protected int tabScrollOffset;
     protected float tabScrollDisplay;
     protected int maxTabScroll;
     private int tabContentHeight;
+    private int tabContentWidth;
+
+    protected boolean compactTabs;
 
     private long lastFrameNanos;
 
@@ -85,26 +88,67 @@ public abstract class OptionScreen extends Screen {
         panelRight = panelLeft + totalWidth;
         panelBottom = panelTop + totalHeight;
 
-        tabAreaLeft = panelLeft;
-        tabAreaTop = panelTop + 6 + 18;
-        tabAreaRight = panelLeft + 110;
-        tabAreaBottom = panelBottom - 60;
+        compactTabs = shouldUseCompactTabs();
+        boolean tabs = showTabs();
 
-        rowAreaLeft = panelLeft + 110 + 6;
-        rowAreaTop = panelTop + 6 + 18;
-        rowAreaRight = computeRowAreaRight();
-        rowAreaBottom = panelBottom - 60;
+        if (!tabs) {
+            tabAreaLeft = panelLeft;
+            tabAreaRight = panelLeft;
+            tabAreaTop = panelTop + 6 + 18;
+            tabAreaBottom = tabAreaTop;
 
-        int tabY = tabAreaTop;
-        for (OptionGroup g : groups) {
-            TabButton tb = new TabButton(tabAreaLeft, tabY, 110, 22, g, this::selectGroup);
-            tabButtons.add(tb);
-            tabY += 22;
+            rowAreaLeft = panelLeft;
+            rowAreaTop = panelTop + 6 + 18;
+            rowAreaRight = computeRowAreaRight();
+            rowAreaBottom = panelBottom - 60;
+        } else if (compactTabs) {
+            tabAreaLeft = panelLeft;
+            tabAreaRight = panelRight;
+            tabAreaTop = panelTop + 6 + 18;
+            tabAreaBottom = tabAreaTop + 22;
+
+            rowAreaLeft = panelLeft;
+            rowAreaTop = tabAreaBottom + 4;
+            rowAreaRight = computeRowAreaRight();
+            rowAreaBottom = panelBottom - 60;
+        } else {
+            tabAreaLeft = panelLeft;
+            tabAreaTop = panelTop + 6 + 18;
+            tabAreaRight = panelLeft + 110;
+            tabAreaBottom = panelBottom - 60;
+
+            rowAreaLeft = panelLeft + 110 + 6;
+            rowAreaTop = panelTop + 6 + 18;
+            rowAreaRight = computeRowAreaRight();
+            rowAreaBottom = panelBottom - 60;
         }
-        tabContentHeight = tabY - tabAreaTop;
-        maxTabScroll = Math.max(0, tabContentHeight - (tabAreaBottom - tabAreaTop));
-        tabScrollOffset = Math.min(tabScrollOffset, maxTabScroll);
-        tabScrollDisplay = Math.min(tabScrollDisplay, maxTabScroll);
+
+        tabContentHeight = 0;
+        tabContentWidth = 0;
+        if (tabs && compactTabs) {
+            int tabX = tabAreaLeft;
+            for (OptionGroup g : groups) {
+                int textW = this.font.width(g.getTitle());
+                int w = Mth.clamp(textW + 16, 60, 140);
+                TabButton tb = new TabButton(tabX, tabAreaTop, w, 22, g, this::selectGroup);
+                tb.setHorizontal(true);
+                tabButtons.add(tb);
+                tabX += w + 2;
+            }
+            tabContentWidth = tabX - tabAreaLeft;
+            maxTabScroll = Math.max(0, tabContentWidth - (tabAreaRight - tabAreaLeft));
+        } else if (tabs) {
+            int tabY = tabAreaTop;
+            for (OptionGroup g : groups) {
+                TabButton tb = new TabButton(tabAreaLeft, tabY, 110, 22, g, this::selectGroup);
+                tabButtons.add(tb);
+                tabY += 22;
+            }
+            tabContentHeight = tabY - tabAreaTop;
+            maxTabScroll = Math.max(0, tabContentHeight - (tabAreaBottom - tabAreaTop));
+        }
+        tabScrollOffset = 0;
+        tabScrollDisplay = 0;
 
         int footerY = panelBottom - 56;
         int btnW = 70;
@@ -146,6 +190,14 @@ public abstract class OptionScreen extends Screen {
         return panelRight;
     }
 
+    protected boolean shouldUseCompactTabs() {
+        return this.width < 500;
+    }
+
+    protected boolean showTabs() {
+        return true;
+    }
+
     protected void selectGroup(OptionGroup group) {
         if (activeGroup == group && !activeRows.isEmpty()) return;
         for (OptionRow<?> r : activeRows) r.closeOverlay();
@@ -159,16 +211,25 @@ public abstract class OptionScreen extends Screen {
             if (tb.getGroup() == group) selectedIndex = i;
         }
         if (selectedIndex >= 0 && maxTabScroll > 0) {
-            int btnTop = selectedIndex * 22;
-            int btnBot = btnTop + 22;
-            int viewH = tabAreaBottom - tabAreaTop;
-            if (btnTop < tabScrollOffset) tabScrollOffset = btnTop;
-            else if (btnBot > tabScrollOffset + viewH) tabScrollOffset = btnBot - viewH;
+            TabButton sel = tabButtons.get(selectedIndex);
+            if (compactTabs) {
+                int btnLeft = sel.getX() - tabAreaLeft;
+                int btnRight = btnLeft + sel.getWidth();
+                int viewW = tabAreaRight - tabAreaLeft;
+                if (btnLeft < tabScrollOffset) tabScrollOffset = btnLeft;
+                else if (btnRight > tabScrollOffset + viewW) tabScrollOffset = btnRight - viewW;
+            } else {
+                int btnTop = selectedIndex * 22;
+                int btnBot = btnTop + 22;
+                int viewH = tabAreaBottom - tabAreaTop;
+                if (btnTop < tabScrollOffset) tabScrollOffset = btnTop;
+                else if (btnBot > tabScrollOffset + viewH) tabScrollOffset = btnBot - viewH;
+            }
             tabScrollOffset = Mth.clamp(tabScrollOffset, 0, maxTabScroll);
         }
 
         int rowY = rowAreaTop;
-        int rowW = rowAreaRight - rowAreaLeft - 10;
+        int rowW = rowAreaRight - rowAreaLeft;
         for (OptionRow<?> template : group.getRows()) {
             template.setX(rowAreaLeft);
             template.setY(rowY);
@@ -245,17 +306,26 @@ public abstract class OptionScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partialTick);
 
-        boolean inTabArea = mouseX >= tabAreaLeft && mouseX < tabAreaRight && mouseY >= tabAreaTop && mouseY < tabAreaBottom;
-        int adjTabMouseY = inTabArea ? mouseY + Math.round(tabScrollDisplay) : Integer.MIN_VALUE;
-        g.enableScissor(tabAreaLeft, tabAreaTop, tabAreaRight, tabAreaBottom);
-        g.pose().pushPose();
-        g.pose().translate(0, -tabScrollDisplay, 0);
-        for (TabButton tb : tabButtons) {
-            tb.render(g, mouseX, adjTabMouseY, partialTick);
+        if (!tabButtons.isEmpty()) {
+            boolean inTabArea = mouseX >= tabAreaLeft && mouseX < tabAreaRight && mouseY >= tabAreaTop && mouseY < tabAreaBottom;
+            int adjTabMouseX = mouseX;
+            int adjTabMouseY = mouseY;
+            if (compactTabs) {
+                adjTabMouseX = inTabArea ? mouseX + Math.round(tabScrollDisplay) : Integer.MIN_VALUE;
+            } else {
+                adjTabMouseY = inTabArea ? mouseY + Math.round(tabScrollDisplay) : Integer.MIN_VALUE;
+            }
+            g.enableScissor(tabAreaLeft, tabAreaTop, tabAreaRight, tabAreaBottom);
+            g.pose().pushPose();
+            if (compactTabs) g.pose().translate(-tabScrollDisplay, 0, 0);
+            else g.pose().translate(0, -tabScrollDisplay, 0);
+            for (TabButton tb : tabButtons) {
+                tb.render(g, adjTabMouseX, adjTabMouseY, partialTick);
+            }
+            g.pose().popPose();
+            g.disableScissor();
+            if (maxTabScroll > 0) renderTabScrollbar(g);
         }
-        g.pose().popPose();
-        g.disableScissor();
-        if (maxTabScroll > 0) renderTabScrollbar(g);
 
         g.enableScissor(rowAreaLeft, rowAreaTop, rowAreaRight, rowAreaBottom);
         g.pose().pushPose();
@@ -285,11 +355,19 @@ public abstract class OptionScreen extends Screen {
         out.add(new int[]{panelLeft, panelTop, panelRight - panelLeft, 18});
         int tabScroll = Math.round(tabScrollDisplay);
         for (TabButton tb : tabButtons) {
-            int y = tb.getY() - tabScroll;
-            int yBot = y + tb.getHeight();
-            int top = Math.max(y, tabAreaTop);
-            int bot = Math.min(yBot, tabAreaBottom);
-            if (bot > top) out.add(new int[]{tb.getX(), top, tb.getWidth(), bot - top});
+            if (compactTabs) {
+                int x = tb.getX() - tabScroll;
+                int xRight = x + tb.getWidth();
+                int left = Math.max(x, tabAreaLeft);
+                int right = Math.min(xRight, tabAreaRight);
+                if (right > left) out.add(new int[]{left, tb.getY(), right - left, tb.getHeight()});
+            } else {
+                int y = tb.getY() - tabScroll;
+                int yBot = y + tb.getHeight();
+                int top = Math.max(y, tabAreaTop);
+                int bot = Math.min(yBot, tabAreaBottom);
+                if (bot > top) out.add(new int[]{tb.getX(), top, tb.getWidth(), bot - top});
+            }
         }
         int rowScroll = Math.round(rowScrollDisplay);
         for (OptionRow<?> row : activeRows) {
@@ -337,6 +415,17 @@ public abstract class OptionScreen extends Screen {
     }
 
     private void renderTabScrollbar(GuiGraphics g) {
+        if (compactTabs) {
+            int trackY = tabAreaBottom - 1;
+            int trackLeft = tabAreaLeft + 1;
+            int trackRight = tabAreaRight - 1;
+            int trackW = trackRight - trackLeft;
+            int areaW = tabAreaRight - tabAreaLeft;
+            int thumbW = Math.max(16, trackW * areaW / Math.max(1, tabContentWidth));
+            int thumbX = trackLeft + (int) ((trackW - thumbW) * tabScrollDisplay / Math.max(1, maxTabScroll));
+            g.fill(thumbX, trackY, thumbX + thumbW, trackY + 1, draggingTabScrollbar ? 0xFFFFFFFF : 0xFFAAAAAA);
+            return;
+        }
         int trackX = tabAreaRight - 1;
         int trackTop = tabAreaTop + 1;
         int trackBot = tabAreaBottom - 1;
@@ -383,13 +472,14 @@ public abstract class OptionScreen extends Screen {
         }
         if (maxTabScroll > 0 && isOnTabScrollbar(mouseX, mouseY)) {
             draggingTabScrollbar = true;
-            updateTabScrollFromMouse(mouseY);
+            updateTabScrollFromMouse(mouseX, mouseY);
             return true;
         }
         if (mouseX >= tabAreaLeft && mouseX < tabAreaRight && mouseY >= tabAreaTop && mouseY < tabAreaBottom) {
-            double adjY = mouseY + tabScrollDisplay;
+            double adjX = compactTabs ? mouseX + tabScrollDisplay : mouseX;
+            double adjY = compactTabs ? mouseY : mouseY + tabScrollDisplay;
             for (TabButton tb : tabButtons) {
-                if (tb.mouseClicked(mouseX, adjY, button)) {
+                if (tb.mouseClicked(adjX, adjY, button)) {
                     return true;
                 }
             }
@@ -416,7 +506,7 @@ public abstract class OptionScreen extends Screen {
             return true;
         }
         if (draggingTabScrollbar) {
-            updateTabScrollFromMouse(mouseY);
+            updateTabScrollFromMouse(mouseX, mouseY);
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dx, dy);
@@ -459,6 +549,10 @@ public abstract class OptionScreen extends Screen {
     }
 
     private boolean isOnTabScrollbar(double mouseX, double mouseY) {
+        if (compactTabs) {
+            int trackY = tabAreaBottom - 4;
+            return mouseY >= trackY && mouseY < trackY + 3 && mouseX >= tabAreaLeft && mouseX < tabAreaRight;
+        }
         int trackX = tabAreaRight - 4;
         return mouseX >= trackX && mouseX < trackX + 3 && mouseY >= tabAreaTop && mouseY < tabAreaBottom;
     }
@@ -470,7 +564,14 @@ public abstract class OptionScreen extends Screen {
         rowScrollOffset = (int) (t * maxRowScroll);
     }
 
-    private void updateTabScrollFromMouse(double mouseY) {
+    private void updateTabScrollFromMouse(double mouseX, double mouseY) {
+        if (compactTabs) {
+            int trackLeft = tabAreaLeft + 1;
+            int trackRight = tabAreaRight - 1;
+            double t = Mth.clamp((mouseX - trackLeft) / Math.max(1, trackRight - trackLeft), 0.0, 1.0);
+            tabScrollOffset = (int) (t * maxTabScroll);
+            return;
+        }
         int trackTop = tabAreaTop + 1;
         int trackBot = tabAreaBottom - 1;
         double t = Mth.clamp((mouseY - trackTop) / Math.max(1, trackBot - trackTop), 0.0, 1.0);

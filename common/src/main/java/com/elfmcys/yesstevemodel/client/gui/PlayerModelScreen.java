@@ -106,11 +106,17 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
         return new ModelButton(x, y, isAuthLocked, previewEntity, modelAssembly);
     }
 
-    public PlayerTextureScreen createTextureScreen(PlayerModelScreen other, String str, ModelAssembly modelAssembly) {
+    public Screen createTextureScreen(PlayerModelScreen other, String str, ModelAssembly modelAssembly) {
+        if (GeneralConfig.TEXTURE_SCREEN_MODE != null && GeneralConfig.TEXTURE_SCREEN_MODE.get() == GeneralConfig.TextureScreenMode.MODERN) {
+            return new rip.ysm.gui.ModernPlayerTextureScreen(other, str, modelAssembly);
+        }
         return new PlayerTextureScreen(other, str, modelAssembly);
     }
 
-    public ModelInfoScreen createModelInfoScreen(PlayerModelScreen other, ModelAssembly modelAssembly) {
+    public Screen createModelInfoScreen(PlayerModelScreen other, ModelAssembly modelAssembly) {
+        if (GeneralConfig.MODEL_INFO_SCREEN_MODE != null && GeneralConfig.MODEL_INFO_SCREEN_MODE.get() == GeneralConfig.ModelInfoScreenMode.MODERN) {
+            return new rip.ysm.gui.ModernModelInfoScreen(other, modelAssembly);
+        }
         return new ModelInfoScreen(other, modelAssembly);
     }
 

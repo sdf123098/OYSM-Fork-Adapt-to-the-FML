@@ -1,7 +1,7 @@
 package com.elfmcys.yesstevemodel.geckolib3.core.builder;
 
-import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.BoneAnimation;
 import com.elfmcys.yesstevemodel.geckolib3.core.event.ParticleEventKeyFrame;
+import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.BoneAnimation;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.event.EventKeyFrame;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.IValue;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
@@ -40,6 +40,9 @@ public class Animation {
     public final List<EventKeyFrame<IValue[]>> customInstructionKeyframes;
 
     public boolean isFromPrimaryAssembly = false;
+
+    @Nullable
+    public String sourceKey;
 
     public Animation(String animationName, double animationLength, ILoopType loop,
                      @Nullable IValue unKnowData1, @Nullable IValue unKnowData2,

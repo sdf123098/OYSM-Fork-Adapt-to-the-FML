@@ -281,8 +281,8 @@ public class YSMClientMapper {
         TranslucencyScanner armScanner = raw.mainEntity.armModel != null ?
                 new TranslucencyScanner(imagesArray, textureCount) : null;
 
-        GeoModel mainMesh = buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner);
-        GeoModel armMesh = raw.mainEntity.armModel != null ? buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner) : mainMesh;
+        GeoModel mainMesh = buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout);
+        GeoModel armMesh = raw.mainEntity.armModel != null ? buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner, raw.properties.allCutout) : mainMesh;
 
 //        System.out.println(modelId + Arrays.toString(mainMesh.translucentTexture));
 
@@ -314,7 +314,7 @@ public class YSMClientMapper {
         return new ClientModelInfo(mainModelData, extraItemModels, extraEntityModels, extraResources, modelInfo, avatarTextures, extraTextures);
     }
 
-    private static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TranslucencyScanner scanner) {
+    private static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TranslucencyScanner scanner, boolean allCutout) {
         if (rawGeo == null || rawGeo.bones.isEmpty()) {
             boolean[] fallbackArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
             return buildMesh(new GeoBone[0], new HashMap<>(), context, fallbackArray);
@@ -340,6 +340,9 @@ public class YSMClientMapper {
             bb.parentIdx = -1;
 
             // TODO: 优化算法
+
+            boolean forceCull = allCutout;
+
             for (RawYsmModel.RawCube rc : rb.cubes) {
                 GeoModel.BakedCube bc = new GeoModel.BakedCube();
 
@@ -355,6 +358,10 @@ public class YSMClientMapper {
 
                     if (faceState == TranslucencyScanner.STATE_TRANSLUCENT) {
                         hasTranslucentFace = true;
+                    }
+
+                    if (!forceCull && isNegativeSizedFace(rf)) {
+                        forceCull = true;
                     }
 
                     GeoModel.BakedQuad bq = new GeoModel.BakedQuad();
@@ -398,7 +405,9 @@ public class YSMClientMapper {
                     isZeroThickness = false;
                 }
 
-                if (hasTranslucentFace) {
+                if (forceCull) {
+                    bc.cullable = true;
+                } else if (hasTranslucentFace) {
                     bc.cullable = false;
                 } else if (isZeroThickness && validFaceCount > 1) {
                     bc.cullable = true;
@@ -753,7 +762,7 @@ public class YSMClientMapper {
             }
         }
 
-        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner);
+        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner, true);
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : sub.animationFiles.entrySet()) {
@@ -795,7 +804,7 @@ public class YSMClientMapper {
             }
         }
 
-        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner);
+        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner, true);
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
         for (RawYsmModel.RawAnimationFile animFile : sub.animationFiles.values()) {
@@ -955,5 +964,44 @@ public class YSMClientMapper {
                         .mapToDouble(i -> model.visibleBoundsOffset[i])
                         .toArray()
         );
+    }
+
+    private static boolean isNegativeSizedFace(RawYsmModel.RawFace f) {
+        float[] p0 = f.positions[0];
+        float[] p1 = f.positions[1];
+        float[] p2 = f.positions[2];
+
+        float ax = p1[0] - p0[0];
+        float ay = p1[1] - p0[1];
+        float az = p1[2] - p0[2];
+
+        float bx = p2[0] - p0[0];
+        float by = p2[1] - p0[1];
+        float bz = p2[2] - p0[2];
+
+        float nx = ay * bz - az * by;
+        float ny = az * bx - ax * bz;
+        float nz = ax * by - ay * bx;
+
+        float len2 = nx * nx + ny * ny + nz * nz;
+        if (len2 <= 1e-10f) {
+            float[] p3 = f.positions[3];
+
+            bx = p3[0] - p0[0];
+            by = p3[1] - p0[1];
+            bz = p3[2] - p0[2];
+
+            nx = ay * bz - az * by;
+            ny = az * bx - ax * bz;
+            nz = ax * by - ay * bx;
+
+            len2 = nx * nx + ny * ny + nz * nz;
+            if (len2 <= 1e-10f) {
+                return false;
+            }
+        }
+
+        float dot = nx * f.normal[0] + ny * f.normal[1] + nz * f.normal[2];
+        return dot < -1e-5f;
     }
 }

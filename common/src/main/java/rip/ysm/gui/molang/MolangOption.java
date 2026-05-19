@@ -7,10 +7,11 @@ import com.elfmcys.yesstevemodel.geckolib3.resource.GeckoLibCache;
 import com.elfmcys.yesstevemodel.molang.parser.ParseException;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.C2SRequestExecuteMolangPacket;
-import net.minecraft.network.chat.Component;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import rip.ysm.gui.Option;
+
+import java.util.function.Consumer;
 
 public final class MolangOption {
 
@@ -52,7 +53,7 @@ public final class MolangOption {
         return b != null && b ? 1.0f : 0.0f;
     }
 
-    private static void evaluate(AnimatableEntity<?> animatable, String expr, java.util.function.Consumer<String> consumer) {
+    private static void evaluate(AnimatableEntity<?> animatable, String expr, Consumer<String> consumer) {
         try {
             animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, consumer);
         } catch (ParseException e) {
@@ -68,40 +69,6 @@ public final class MolangOption {
             }
         } catch (ParseException e) {
             YesSteveModel.LOGGER.error(e);
-        }
-    }
-
-    private static final class LiveOption<T> extends Option<T> {
-        private final java.util.function.Supplier<T> liveGetter;
-        private final String titleText;
-        private final String descText;
-
-        private LiveOption(String titleText, String descText, java.util.function.Supplier<T> getter, java.util.function.Consumer<T> setter) {
-            super("", getter, setter);
-            this.liveGetter = getter;
-            this.titleText = titleText;
-            this.descText = descText == null ? "" : descText;
-        }
-
-        @Override
-        public T get() {
-            return liveGetter.get();
-        }
-
-        @Override
-        public Component getLabel() {
-            return Component.literal(titleText);
-        }
-
-        @Override
-        public Component getDescription() {
-            return Component.literal(descText);
-        }
-
-        @Override
-        public void setPending(T value) {
-            super.setPending(value);
-            apply();
         }
     }
 }

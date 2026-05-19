@@ -8,60 +8,29 @@ import com.google.gson.JsonParser;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
-import org.joml.Vector3fc;
 import org.joml.Vector4f;
 import rip.ysm.imagestream.avif.AvifDecoder;
 import rip.ysm.imagestream.webp.WebpDecoder;
 
 import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static com.elfmcys.yesstevemodel.util.DigestUtil.md5Digest;
 import static com.elfmcys.yesstevemodel.util.DigestUtil.md5Hex;
 import static com.elfmcys.yesstevemodel.util.DigestUtil.sha256Hex;
 
 public class YSMFolderDeserializer implements AutoCloseable {
-    private static final Vector3f NORMAL_NORTH = new Vector3f(0, 0, -1);
-    private static final Vector3f NORMAL_SOUTH = new Vector3f(0, 0, 1);
-    private static final Vector3f NORMAL_EAST = new Vector3f(1, 0, 0);
-    private static final Vector3f NORMAL_WEST = new Vector3f(-1, 0, 0);
-    private static final Vector3f NORMAL_UP = new Vector3f(0, 1, 0);
-    private static final Vector3f NORMAL_DOWN = new Vector3f(0, -1, 0);
-
-    private static final int[] FACE_WEST_CORNERS = {3, 2, 0, 1};   // p4, p3, p1, p2
-    private static final int[] FACE_EAST_CORNERS = {6, 7, 5, 4};   // p7, p8, p6, p5
-    private static final int[] FACE_NORTH_CORNERS = {2, 6, 4, 0};  // p3, p7, p5, p1
-    private static final int[] FACE_SOUTH_CORNERS = {7, 3, 1, 5};  // p8, p4, p2, p6
-    private static final int[] FACE_UP_CORNERS = {3, 7, 6, 2};     // p4, p8, p7, p3
-    private static final int[] FACE_DOWN_CORNERS = {0, 4, 5, 1};   // p1, p5, p6, p2
-
-    private static final Float FLOAT_ZERO = 0f;
-    private static final Comparator<Map.Entry<String, JsonElement>> ENTRY_BY_NUMERIC_KEY =
-            Comparator.comparingDouble(e -> Double.parseDouble(e.getKey()));
-
-    private static JsonObject parseJsonObject(byte[] data) {
-        return JsonParser.parseReader(
-                new InputStreamReader(new ByteArrayInputStream(data), StandardCharsets.UTF_8)
-        ).getAsJsonObject();
-    }
-
     private final Map<String, String> readFilesMd5Map = new TreeMap<>();
     private String finalFolderHash;
     private final Path rootPath;
@@ -69,11 +38,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
     private final RawYsmModel model;
 
     private final Map<String, byte[]> inMemoryFiles;
-
-    private final Vector3f scratchNormal = new Vector3f();
-    private final Vector4f scratchPos = new Vector4f();
-    private final Matrix4f scratchBakeMat = new Matrix4f();
-    private final Matrix3f scratchNormalMat = new Matrix3f();
 
     public YSMFolderDeserializer(Path sourcePath) throws IOException {
         if (!Files.exists(sourcePath)) {
@@ -108,15 +72,14 @@ public class YSMFolderDeserializer implements AutoCloseable {
     private byte[] readResource(String relativePath) {
         if (relativePath == null || relativePath.isEmpty()) return null;
         try {
-            String path = relativePath;
-            if (!path.isEmpty() && path.charAt(0) == '/') {
-                path = path.substring(1);
+            if (relativePath.startsWith("/")) {
+                relativePath = relativePath.substring(1);
             }
-            String normalizedPath = path.indexOf('\\') >= 0 ? path.replace('\\', '/') : path;
+            String normalizedPath = relativePath.replace('\\', '/');
             byte[] data = null;
 
             if (inMemoryFiles == null) {
-                Path target = rootPath.resolve(path);
+                Path target = rootPath.resolve(relativePath);
                 if (Files.exists(target) && Files.isRegularFile(target)) {
                     data = Files.readAllBytes(target);
                 }
@@ -138,7 +101,9 @@ public class YSMFolderDeserializer implements AutoCloseable {
     public RawYsmModel deserialize() {
         byte[] ysmJsonBytes = readResource("ysm.json");
         if (ysmJsonBytes != null) {  // https://ysm.cfpa.team/wiki/struct/#%E6%96%87%E4%BB%B6%E7%9B%AE%E5%BD%95%E7%BB%93%E6%9E%84
-            parseYsmJson(parseJsonObject(ysmJsonBytes));
+            String jsonStr = new String(ysmJsonBytes, StandardCharsets.UTF_8);
+            JsonObject ysmJson = JsonParser.parseString(jsonStr).getAsJsonObject();
+            parseYsmJson(ysmJson);
         } else parseLegacyFormat();
 
         parseGlobalResources();
@@ -327,10 +292,63 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
         if (playerObj.has("texture")) {
             JsonElement texElem = playerObj.get("texture");
-            if (texElem.isJsonArray()) {
-                for (JsonElement elem : texElem.getAsJsonArray()) processMainTextureEntry(elem);
-            } else {
-                processMainTextureEntry(texElem);
+            Iterable<JsonElement> texArr = texElem.isJsonArray() ? texElem.getAsJsonArray() : Collections.singletonList(texElem);
+            for (JsonElement elem : texArr) {
+                String texPath = null;
+                if (elem.isJsonPrimitive()) {
+                    texPath = elem.getAsString();
+                } else if (elem.isJsonObject() && elem.getAsJsonObject().has("uv")) {
+                    texPath = elem.getAsJsonObject().get("uv").getAsString();
+                }
+                if (texPath == null) continue;
+
+                byte[] texData = readResource(texPath);
+                if (texData != null) {
+                    ImageMeta meta = parseImageMeta(texData, texPath);
+                    RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
+                    rt.hash = sha256Hex(texData); // 计算原始数据的 hash
+                    rt.width = meta.width();
+                    rt.height = meta.height();
+                    rt.imageFormat = meta.format();
+                    rt.name = extractFileName(texPath);
+                    rt.data = texData;
+                    rt.unknownFlag = 1;
+
+                    if (elem.isJsonObject()) {
+                        JsonObject obj = elem.getAsJsonObject();
+                        if (obj.has("specular")) {
+                            byte[] spData = readResource(obj.get("specular").getAsString());
+                            if (spData != null) {
+                                ImageMeta spMeta = parseImageMeta(spData, "specular");
+                                RawYsmModel.RawTexture.SubTexture sub = new RawYsmModel.RawTexture.SubTexture();
+                                sub.specularType = 2;
+                                sub.data = spData;
+                                sub.unknownFlag = 1;
+                                sub.hash = sha256Hex(spData);
+                                sub.width = spMeta.width();
+                                sub.height = spMeta.height();
+                                sub.imageFormat = spMeta.format();
+                                rt.subTextures.add(sub);
+                            }
+                        }
+                        if (obj.has("normal")) {
+                            byte[] nrData = readResource(obj.get("normal").getAsString());
+                            if (nrData != null) {
+                                ImageMeta nrMeta = parseImageMeta(nrData, "normal");
+                                RawYsmModel.RawTexture.SubTexture sub = new RawYsmModel.RawTexture.SubTexture();
+                                sub.specularType = 1;
+                                sub.data = nrData;
+                                sub.unknownFlag = 1;
+                                sub.hash = sha256Hex(nrData);
+                                sub.width = nrMeta.width();
+                                sub.height = nrMeta.height();
+                                sub.imageFormat = nrMeta.format();
+                                rt.subTextures.add(sub);
+                            }
+                        }
+                    }
+                    model.mainEntity.textures.put(rt.name, rt);
+                }
             }
         }
 
@@ -362,160 +380,96 @@ public class YSMFolderDeserializer implements AutoCloseable {
         }
     }
 
-    private void processMainTextureEntry(JsonElement elem) {
-        String texPath = null;
-        JsonObject elemObj = null;
-        if (elem.isJsonPrimitive()) {
-            texPath = elem.getAsString();
-        } else if (elem.isJsonObject()) {
-            elemObj = elem.getAsJsonObject();
-            JsonElement uv = elemObj.get("uv");
-            if (uv != null) texPath = uv.getAsString();
-        }
-        if (texPath == null) return;
-
-        byte[] texData = readResource(texPath);
-        if (texData == null) return;
-
-        ImageMeta meta = parseImageMeta(texData, texPath);
-        RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-        rt.hash = sha256Hex(texData); // 计算原始数据的 hash
-        rt.width = meta.width();
-        rt.height = meta.height();
-        rt.imageFormat = meta.format();
-        rt.name = extractFileName(texPath);
-        rt.data = texData;
-        rt.unknownFlag = 1;
-
-        if (elemObj != null) {
-            JsonElement specular = elemObj.get("specular");
-            if (specular != null) {
-                byte[] spData = readResource(specular.getAsString());
-                if (spData != null) {
-                    ImageMeta spMeta = parseImageMeta(spData, "specular");
-                    RawYsmModel.RawTexture.SubTexture sub = new RawYsmModel.RawTexture.SubTexture();
-                    sub.specularType = 2;
-                    sub.data = spData;
-                    sub.unknownFlag = 1;
-                    sub.hash = sha256Hex(spData);
-                    sub.width = spMeta.width();
-                    sub.height = spMeta.height();
-                    sub.imageFormat = spMeta.format();
-                    rt.subTextures.add(sub);
-                }
-            }
-            JsonElement normal = elemObj.get("normal");
-            if (normal != null) {
-                byte[] nrData = readResource(normal.getAsString());
-                if (nrData != null) {
-                    ImageMeta nrMeta = parseImageMeta(nrData, "normal");
-                    RawYsmModel.RawTexture.SubTexture sub = new RawYsmModel.RawTexture.SubTexture();
-                    sub.specularType = 1;
-                    sub.data = nrData;
-                    sub.unknownFlag = 1;
-                    sub.hash = sha256Hex(nrData);
-                    sub.width = nrMeta.width();
-                    sub.height = nrMeta.height();
-                    sub.imageFormat = nrMeta.format();
-                    rt.subTextures.add(sub);
-                }
-            }
-        }
-        model.mainEntity.textures.put(rt.name, rt);
-    }
-
     private void parseSubEntities(JsonElement sectionElem, Map<String, RawYsmModel.RawSubEntity> targetMap, String defaultIdentifier) {
+        if (!sectionElem.isJsonArray() && !sectionElem.isJsonObject()) return;
+        List<JsonObject> items = new ArrayList<>();
+
         if (sectionElem.isJsonArray()) {
-            int index = 0;
             for (JsonElement e : sectionElem.getAsJsonArray()) {
-                if (!e.isJsonObject()) continue;
-                processSubEntity(e.getAsJsonObject(), defaultIdentifier + "_" + index, index, targetMap);
-                index++;
+                if (e.isJsonObject()) items.add(e.getAsJsonObject());
             }
-        } else if (sectionElem.isJsonObject()) {
-            int index = 0;
-            for (Map.Entry<String, JsonElement> entry : sectionElem.getAsJsonObject().entrySet()) {
-                JsonElement v = entry.getValue();
-                if (!v.isJsonObject()) continue;
-                JsonObject item = v.getAsJsonObject();
-                String id = item.has("match") ? (defaultIdentifier + "_" + index) : entry.getKey();
-                processSubEntity(item, id, index, targetMap);
-                index++;
-            }
-        }
-    }
-
-    private void processSubEntity(JsonObject item, String identifier, int index, Map<String, RawYsmModel.RawSubEntity> targetMap) {
-        RawYsmModel.RawSubEntity sub = new RawYsmModel.RawSubEntity();
-        sub.identifier = identifier;
-
-        JsonElement match = item.get("match");
-        if (match != null) {
-            if (match.isJsonArray()) {
-                JsonArray mArr = match.getAsJsonArray();
-                sub.matchIds = new String[mArr.size()];
-                for (int i = 0; i < mArr.size(); i++) sub.matchIds[i] = mArr.get(i).getAsString();
-            } else if (match.isJsonPrimitive()) {
-                sub.matchIds = new String[]{match.getAsString()};
+        } else {
+            JsonObject mapObj = sectionElem.getAsJsonObject();
+            for (Map.Entry<String, JsonElement> entry : mapObj.entrySet()) {
+                if (entry.getValue().isJsonObject()) {
+                    JsonObject item = entry.getValue().getAsJsonObject();
+                    if (!item.has("match")) item.addProperty("__temp_identifier", entry.getKey());
+                    items.add(item);
+                }
             }
         }
 
-        JsonElement modelElem = item.get("model");
-        if (modelElem != null) {
-            byte[] geoData = readResource(modelElem.getAsString());
-            if (geoData != null) sub.model = parseGeometry(geoData, 3);
-        }
+        int index = 0;
+        for (JsonObject item : items) {
+            RawYsmModel.RawSubEntity sub = new RawYsmModel.RawSubEntity();
+            sub.identifier = item.has("__temp_identifier") ? item.get("__temp_identifier").getAsString() : (defaultIdentifier + "_" + index);
 
-        JsonElement textureElem = item.get("texture");
-        if (textureElem != null) {
-            String texPath = textureElem.isJsonObject() ? textureElem.getAsJsonObject().get("uv").getAsString() : textureElem.getAsString();
-            byte[] texData = readResource(texPath);
-            if (texData != null) {
-                ImageMeta meta = parseImageMeta(texData, texPath);
-                RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-
-                rt.hash = sha256Hex(texData);
-                rt.width = meta.width();
-                rt.height = meta.height();
-                rt.imageFormat = meta.format();
-
-                rt.name = "base_texture_" + index;
-                rt.data = texData;
-                rt.unknownFlag = 1;
-                sub.textures.put(rt.name, rt);
+            if (item.has("match")) {
+                JsonElement match = item.get("match");
+                if (match.isJsonArray()) {
+                    JsonArray mArr = match.getAsJsonArray();
+                    sub.matchIds = new String[mArr.size()];
+                    for (int i = 0; i < mArr.size(); i++) sub.matchIds[i] = mArr.get(i).getAsString();
+                } else if (match.isJsonPrimitive()) {
+                    sub.matchIds = new String[]{match.getAsString()};
+                }
             }
-        }
 
-        JsonElement animElem = item.get("animation");
-        if (animElem != null) {
-            byte[] animData = readResource(animElem.getAsString());
-            if (animData != null) {
-                RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
-                raf.fileHash = sha256Hex(animData);
-                raf.animType = getAnimTypeFromKey("extra");
-                sub.animationFiles.put("sub_anim", raf);
+            if (item.has("model")) {
+                byte[] geoData = readResource(item.get("model").getAsString());
+                if (geoData != null) sub.model = parseGeometry(geoData, 3);
             }
-        }
 
-        JsonElement controllerElem = item.get("controller");
-        if (controllerElem != null) {
-            String acPath = controllerElem.getAsString();
-            byte[] acData = readResource(acPath);
-            if (acData != null) {
-                String acHash = sha256Hex(acData);
-                RawYsmModel.RawAnimationControllerFile acFile = new RawYsmModel.RawAnimationControllerFile();
-                acFile.name = extractFileName(acPath);
-                acFile.hash = acHash;
-                parseAnimationControllers(acData, acFile.controllers);
-                sub.animationControllerFiles.add(acFile);
+            if (item.has("texture")) {
+                String texPath = item.get("texture").isJsonObject() ? item.getAsJsonObject("texture").get("uv").getAsString() : item.get("texture").getAsString();
+                byte[] texData = readResource(texPath);
+                if (texData != null) {
+                    ImageMeta meta = parseImageMeta(texData, texPath);
+                    RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
+
+                    rt.hash = sha256Hex(texData);
+                    rt.width = meta.width();
+                    rt.height = meta.height();
+                    rt.imageFormat = meta.format();
+
+                    rt.name = "base_texture_" + index;
+                    rt.data = texData;
+                    rt.unknownFlag = 1;
+                    sub.textures.put(rt.name, rt);
+                }
             }
-        }
 
-        targetMap.put(sub.identifier, sub);
+            if (item.has("animation")) {
+                byte[] animData = readResource(item.get("animation").getAsString());
+                if (animData != null) {
+                    RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
+                    raf.fileHash = sha256Hex(animData);
+                    raf.animType = getAnimTypeFromKey("extra");
+                    sub.animationFiles.put("sub_anim", raf);
+                }
+            }
+
+            if (item.has("controller")) {
+                String acPath = item.get("controller").getAsString();
+                byte[] acData = readResource(acPath);
+                if (acData != null) {
+                    String acHash = sha256Hex(acData);
+                    RawYsmModel.RawAnimationControllerFile acFile = new RawYsmModel.RawAnimationControllerFile();
+                    acFile.name = extractFileName(acPath);
+                    acFile.hash = acHash;
+                    parseAnimationControllers(acData, acFile.controllers);
+                    sub.animationControllerFiles.add(acFile);
+                }
+            }
+
+            targetMap.put(sub.identifier, sub);
+            index++;
+        }
     }
 
     private RawYsmModel.RawGeometry parseGeometry(byte[] data, int modelType) {
-        JsonObject root = parseJsonObject(data);
+        String json = new String(data, StandardCharsets.UTF_8);
+        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         JsonArray geometries = root.has("minecraft:geometry") ? root.getAsJsonArray("minecraft:geometry") : null;
         if (geometries == null || geometries.isEmpty()) return new RawYsmModel.RawGeometry();
 
@@ -557,15 +511,11 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
                 if (bObj.has("pivot")) {
                     JsonArray pivot = bObj.getAsJsonArray("pivot");
-                    bone.pivot[0] = -pivot.get(0).getAsFloat();
-                    bone.pivot[1] = pivot.get(1).getAsFloat();
-                    bone.pivot[2] = pivot.get(2).getAsFloat();
+                    bone.pivot = new float[]{-pivot.get(0).getAsFloat(), pivot.get(1).getAsFloat(), pivot.get(2).getAsFloat()};
                 }
                 if (bObj.has("rotation")) {
                     JsonArray rot = bObj.getAsJsonArray("rotation");
-                    bone.rotation[0] = (float) -Math.toRadians(rot.get(0).getAsFloat());
-                    bone.rotation[1] = (float) -Math.toRadians(rot.get(1).getAsFloat());
-                    bone.rotation[2] = (float) Math.toRadians(rot.get(2).getAsFloat());
+                    bone.rotation = new float[]{(float) -Math.toRadians(rot.get(0).getAsFloat()), (float) -Math.toRadians(rot.get(1).getAsFloat()), (float) Math.toRadians(rot.get(2).getAsFloat())};
                 }
 
                 float boneInflate = (float) getDouble(bObj, "inflate", 0.0);
@@ -580,65 +530,61 @@ public class YSMFolderDeserializer implements AutoCloseable {
                         float inflate = cObj.has("inflate") ? cObj.get("inflate").getAsFloat() : boneInflate;
                         boolean mirror = cObj.has("mirror") ? cObj.get("mirror").getAsBoolean() : boneMirror;
 
-                        JsonArray originArr = cObj.has("origin") ? cObj.getAsJsonArray("origin") : null;
-                        float originX = readFloat(originArr, 0, 0f);
-                        float originY = readFloat(originArr, 1, 0f);
-                        float originZ = readFloat(originArr, 2, 0f);
+                        float[] origin = getFloatArray(cObj, "origin", 3);
+                        float[] size = getFloatArray(cObj, "size", 3);
 
-                        JsonArray sizeArr = cObj.has("size") ? cObj.getAsJsonArray("size") : null;
-                        float sizeX = readFloat(sizeArr, 0, 0f);
-                        float sizeY = readFloat(sizeArr, 1, 0f);
-                        float sizeZ = readFloat(sizeArr, 2, 0f);
+                        float cx = -origin[0] - size[0] - inflate;
+                        float cy = origin[1] - inflate;
+                        float cz = origin[2] - inflate;
+                        float cw = size[0] + inflate * 2;
+                        float ch = size[1] + inflate * 2;
+                        float cd = size[2] + inflate * 2;
 
-                        float cx = -originX - sizeX - inflate;
-                        float cy = originY - inflate;
-                        float cz = originZ - inflate;
-                        float cw = sizeX + inflate * 2;
-                        float ch = sizeY + inflate * 2;
-                        float cd = sizeZ + inflate * 2;
-
-                        scratchBakeMat.identity();
+                        Matrix4f cubeBakeMat = new Matrix4f();
                         if (cObj.has("rotation") || cObj.has("pivot")) {
-                            JsonArray cpvtArr = cObj.has("pivot") ? cObj.getAsJsonArray("pivot") : null;
-                            JsonArray crotArr = cObj.has("rotation") ? cObj.getAsJsonArray("rotation") : null;
-                            float cpvtX = readFloat(cpvtArr, 0, 0f);
-                            float cpvtY = readFloat(cpvtArr, 1, 0f);
-                            float cpvtZ = readFloat(cpvtArr, 2, 0f);
-                            float crotX = readFloat(crotArr, 0, 0f);
-                            float crotY = readFloat(crotArr, 1, 0f);
-                            float crotZ = readFloat(crotArr, 2, 0f);
-                            scratchBakeMat.translate(-cpvtX / 16f, cpvtY / 16f, cpvtZ / 16f);
-                            scratchBakeMat.rotateZ((float) Math.toRadians(crotZ));
-                            scratchBakeMat.rotateY((float) -Math.toRadians(crotY));
-                            scratchBakeMat.rotateX((float) -Math.toRadians(crotX));
-                            scratchBakeMat.translate(cpvtX / 16f, -cpvtY / 16f, -cpvtZ / 16f);
+                            float[] cpvt = getFloatArray(cObj, "pivot", 3);
+                            float[] crot = getFloatArray(cObj, "rotation", 3);
+                            cubeBakeMat.translate(-cpvt[0] / 16f, cpvt[1] / 16f, cpvt[2] / 16f);
+                            cubeBakeMat.rotateZ((float) Math.toRadians(crot[2]));
+                            cubeBakeMat.rotateY((float) -Math.toRadians(crot[1]));
+                            cubeBakeMat.rotateX((float) -Math.toRadians(crot[0]));
+                            cubeBakeMat.translate(cpvt[0] / 16f, -cpvt[1] / 16f, -cpvt[2] / 16f);
                         }
-                        scratchBakeMat.normal(scratchNormalMat);
+                        Matrix3f cubeNormalMat = new Matrix3f();
+                        cubeBakeMat.normal(cubeNormalMat);
 
                         if (cObj.has("uv")) {
                             JsonElement uvElem = cObj.get("uv");
                             if (uvElem.isJsonObject()) {
                                 JsonObject uvObj = uvElem.getAsJsonObject();
-                                bakeFaceToRaw(cube, uvObj, "north", "north", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_NORTH);
-                                bakeFaceToRaw(cube, uvObj, "south", "south", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_SOUTH);
-                                bakeFaceToRaw(cube, uvObj, "east", mirror ? "west" : "east", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_EAST);
-                                bakeFaceToRaw(cube, uvObj, "west", mirror ? "east" : "west", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_WEST);
-                                bakeFaceToRaw(cube, uvObj, "up", "up", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_UP);
-                                bakeFaceToRaw(cube, uvObj, "down", "down", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_DOWN);
+                                bakeFaceToRaw(cube, uvObj, "north", "north", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, 0, -1), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, uvObj, "south", "south", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, 0, 1), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, uvObj, "east", mirror ? "west" : "east", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(1, 0, 0), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, uvObj, "west", mirror ? "east" : "west", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(-1, 0, 0), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, uvObj, "up", "up", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, 1, 0), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, uvObj, "down", "down", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, -1, 0), cubeBakeMat, cubeNormalMat);
                             } else if (uvElem.isJsonArray()) {
                                 JsonArray uvArr = uvElem.getAsJsonArray();
                                 float uvX = uvArr.get(0).getAsFloat();
                                 float uvY = uvArr.get(1).getAsFloat();
-                                float dx = (float) Math.floor(sizeX);
-                                float dy = (float) Math.floor(sizeY);
-                                float dz = (float) Math.floor(sizeZ);
+                                float dx = (float) Math.floor(size[0]);
+                                float dy = (float) Math.floor(size[1]);
+                                float dz = (float) Math.floor(size[2]);
 
-                                bakeFaceToRaw(cube, uvX + dz,           uvY + dz, dx,  dy, "north", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_NORTH);
-                                bakeFaceToRaw(cube, uvX + dz + dx + dz, uvY + dz, dx,  dy, "south", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_SOUTH);
-                                bakeFaceToRaw(cube, uvX,                uvY + dz, dz,  dy, mirror ? "west" : "east", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_EAST);
-                                bakeFaceToRaw(cube, uvX + dz + dx,      uvY + dz, dz,  dy, mirror ? "east" : "west", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_WEST);
-                                bakeFaceToRaw(cube, uvX + dz,           uvY,      dx,  dz, "up", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_UP);
-                                bakeFaceToRaw(cube, uvX + dz + dx,      uvY + dz, dx, -dz, "down", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, NORMAL_DOWN);
+                                JsonObject fakeUvObj = new JsonObject();
+                                fakeUvObj.add("north", createFaceUVNode(uvX + dz, uvY + dz, dx, dy));
+                                fakeUvObj.add("south", createFaceUVNode(uvX + dz + dx + dz, uvY + dz, dx, dy));
+                                fakeUvObj.add("east", createFaceUVNode(uvX, uvY + dz, dz, dy));
+                                fakeUvObj.add("west", createFaceUVNode(uvX + dz + dx, uvY + dz, dz, dy));
+                                fakeUvObj.add("up", createFaceUVNode(uvX + dz, uvY, dx, dz));
+                                fakeUvObj.add("down", createFaceUVNode(uvX + dz + dx, uvY + dz, dx, -dz));
+
+                                bakeFaceToRaw(cube, fakeUvObj, "north", "north", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, 0, -1), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, fakeUvObj, "south", "south", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, 0, 1), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, fakeUvObj, "east", mirror ? "west" : "east", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(1, 0, 0), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, fakeUvObj, "west", mirror ? "east" : "west", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(-1, 0, 0), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, fakeUvObj, "up", "up", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, 1, 0), cubeBakeMat, cubeNormalMat);
+                                bakeFaceToRaw(cube, fakeUvObj, "down", "down", mirror, cx, cy, cz, cw, ch, cd, geo.textureWidth, geo.textureHeight, new Vector3f(0, -1, 0), cubeBakeMat, cubeNormalMat);
                             }
                         }
                         bone.cubes.add(cube);
@@ -650,68 +596,71 @@ public class YSMFolderDeserializer implements AutoCloseable {
         return geo;
     }
 
-    private void bakeFaceToRaw(RawYsmModel.RawCube cube, JsonObject uvObj, String faceType, String uvFaceName, boolean mirror, float x, float y, float z, float w, float h, float d, float tw, float th, Vector3fc rawNormal) {
+    private void bakeFaceToRaw(RawYsmModel.RawCube cube, JsonObject uvObj, String faceType, String uvFaceName, boolean mirror, float x, float y, float z, float w, float h, float d, float tw, float th, Vector3f rawNormal, Matrix4f cubeBakeMat, Matrix3f cubeNormalMat) {
+        if (!uvObj.has(uvFaceName)) return;
         JsonObject faceData = uvObj.getAsJsonObject(uvFaceName);
-        if (faceData == null) return;
-        JsonArray uvArr = faceData.getAsJsonArray("uv");
-        JsonArray uvSizeArr = faceData.getAsJsonArray("uv_size");
-        float uvU = uvArr != null && uvArr.size() > 0 ? uvArr.get(0).getAsFloat() : 0f;
-        float uvV = uvArr != null && uvArr.size() > 1 ? uvArr.get(1).getAsFloat() : 0f;
-        float uvSizeU = uvSizeArr != null && uvSizeArr.size() > 0 ? uvSizeArr.get(0).getAsFloat() : 0f;
-        float uvSizeV = uvSizeArr != null && uvSizeArr.size() > 1 ? uvSizeArr.get(1).getAsFloat() : 0f;
-        bakeFaceToRaw(cube, uvU, uvV, uvSizeU, uvSizeV, faceType, mirror, x, y, z, w, h, d, tw, th, rawNormal);
-    }
+        float[] uv = getFloatArray(faceData, "uv", 2);
+        float[] uvSize = getFloatArray(faceData, "uv_size", 2);
 
-    private void bakeFaceToRaw(RawYsmModel.RawCube cube, float uvU, float uvV, float uvSizeU, float uvSizeV, String faceType, boolean mirror, float x, float y, float z, float w, float h, float d, float tw, float th, Vector3fc rawNormal) {
-        int[] cornerIndices = switch (faceType) {
-            case "west" -> FACE_WEST_CORNERS;
-            case "east" -> FACE_EAST_CORNERS;
-            case "north" -> FACE_NORTH_CORNERS;
-            case "south" -> FACE_SOUTH_CORNERS;
-            case "up" -> FACE_UP_CORNERS;
-            case "down" -> FACE_DOWN_CORNERS;
-            default -> null;
-        };
-        if (cornerIndices == null) return;
-
-        float u0 = uvU / tw;
-        float v0 = uvV / th;
-        float u1 = (uvU + uvSizeU) / tw;
-        float v1 = (uvV + uvSizeV) / th;
+        float u0 = uv[0] / tw;
+        float v0 = uv[1] / th;
+        float u1 = (uv[0] + uvSize[0]) / tw;
+        float v1 = (uv[1] + uvSize[1]) / th;
 
         if (!mirror) {
             float temp = u0; u0 = u1; u1 = temp;
         }
 
         RawYsmModel.RawFace face = new RawYsmModel.RawFace();
-
-        scratchNormal.set(rawNormal).mul(scratchNormalMat).normalize();
-        face.normal[0] = scratchNormal.x;
-        face.normal[1] = scratchNormal.y;
-        face.normal[2] = scratchNormal.z;
+        Vector3f bakedNormal = new Vector3f(rawNormal).mul(cubeNormalMat).normalize();
+        face.normal = new float[]{bakedNormal.x, bakedNormal.y, bakedNormal.z};
 
         float x1 = x / 16f, x2 = (x + w) / 16f;
         float y1 = y / 16f, y2 = (y + h) / 16f;
         float z1 = z / 16f, z2 = (z + d) / 16f;
 
+        Vector3f p1 = new Vector3f(x1, y1, z1);
+        Vector3f p2 = new Vector3f(x1, y1, z2);
+        Vector3f p3 = new Vector3f(x1, y2, z1);
+        Vector3f p4 = new Vector3f(x1, y2, z2);
+        Vector3f p5 = new Vector3f(x2, y1, z1);
+        Vector3f p6 = new Vector3f(x2, y1, z2);
+        Vector3f p7 = new Vector3f(x2, y2, z1);
+        Vector3f p8 = new Vector3f(x2, y2, z2);
+
+        Vector3f[] positions = switch (faceType) {
+            case "west" -> new Vector3f[]{p4, p3, p1, p2};
+            case "east" -> new Vector3f[]{p7, p8, p6, p5};
+            case "north" -> new Vector3f[]{p3, p7, p5, p1};
+            case "south" -> new Vector3f[]{p8, p4, p2, p6};
+            case "up" -> new Vector3f[]{p4, p8, p7, p3};
+            case "down" -> new Vector3f[]{p1, p5, p6, p2};
+            default -> null;
+        };
+
+        Vector4f tempPos = new Vector4f();
         for (int i = 0; i < 4; i++) {
-            int idx = cornerIndices[i];
-            float px = (idx & 4) != 0 ? x2 : x1;
-            float py = (idx & 2) != 0 ? y2 : y1;
-            float pz = (idx & 1) != 0 ? z2 : z1;
-            scratchPos.set(px, py, pz, 1.0f).mul(scratchBakeMat);
-            face.positions[i][0] = scratchPos.x();
-            face.positions[i][1] = scratchPos.y();
-            face.positions[i][2] = scratchPos.z();
+            tempPos.set(positions[i].x(), positions[i].y(), positions[i].z(), 1.0f).mul(cubeBakeMat);
+            face.positions[i] = new float[]{tempPos.x(), tempPos.y(), tempPos.z()};
         }
 
-        face.u[0] = u0; face.u[1] = u1; face.u[2] = u1; face.u[3] = u0;
-        face.v[0] = v0; face.v[1] = v0; face.v[2] = v1; face.v[3] = v1;
+        face.u = new float[]{u0, u1, u1, u0};
+        face.v = new float[]{v0, v0, v1, v1};
         cube.faces.add(face);
     }
 
+    private JsonObject createFaceUVNode(float u, float v, float w, float h) {
+        JsonObject node = new JsonObject();
+        JsonArray uv = new JsonArray(); uv.add(u); uv.add(v);
+        JsonArray size = new JsonArray(); size.add(w); size.add(h);
+        node.add("uv", uv);
+        node.add("uv_size", size);
+        return node;
+    }
+
     private RawYsmModel.RawAnimationFile parseAnimations(byte[] data) {
-        JsonObject root = parseJsonObject(data);
+        String json = new String(data, StandardCharsets.UTF_8);
+        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         RawYsmModel.RawAnimationFile raf = new RawYsmModel.RawAnimationFile();
 
         if (root.has("animations")) {
@@ -763,11 +712,8 @@ public class YSMFolderDeserializer implements AutoCloseable {
                         RawYsmModel.RawTimelineEvent tle = new RawYsmModel.RawTimelineEvent();
                         tle.timestamp = Float.parseFloat(tlEntry.getKey());
                         JsonElement val = tlEntry.getValue();
-                        if (val.isJsonArray()) {
-                            for (JsonElement e : val.getAsJsonArray()) tle.events.add(e.getAsString());
-                        } else {
-                            tle.events.add(val.getAsString());
-                        }
+                        Iterable<JsonElement> arr = val.isJsonArray() ? val.getAsJsonArray() : Collections.singletonList(val);
+                        for (JsonElement e : arr) tle.events.add(e.getAsString());
                         anim.timelineEvents.add(tle);
                     }
                 }
@@ -789,22 +735,22 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     private void parseChannelToKeyframes(JsonObject bObj, String channel, List<RawYsmModel.RawKeyframe> targetList) {
+        if (!bObj.has(channel)) return;
         JsonElement cElem = bObj.get(channel);
-        if (cElem == null) return;
 
         if (!cElem.isJsonObject()) {
             RawYsmModel.RawKeyframe kf = new RawYsmModel.RawKeyframe();
             kf.timestamp = 0.0f;
             kf.interpolationMode = 0; // linear
             kf.hasPreData = false;
-            jsonElementToMolangArray(cElem, kf.postData);
+            kf.postData = jsonElementToMolangArray(cElem);
             targetList.add(kf);
             return;
         }
 
         JsonObject kfsObj = cElem.getAsJsonObject();
         List<Map.Entry<String, JsonElement>> sorted = new ArrayList<>(kfsObj.entrySet());
-        sorted.sort(ENTRY_BY_NUMERIC_KEY);
+        sorted.sort(Comparator.comparingDouble(e -> Double.parseDouble(e.getKey())));
 
         for (Map.Entry<String, JsonElement> entry : sorted) {
             RawYsmModel.RawKeyframe kf = new RawYsmModel.RawKeyframe();
@@ -814,44 +760,36 @@ public class YSMFolderDeserializer implements AutoCloseable {
             JsonElement valElem = entry.getValue();
             if (valElem.isJsonObject()) {
                 JsonObject obj = valElem.getAsJsonObject();
-                JsonElement lerpMode = obj.get("lerp_mode");
-                if (lerpMode != null) {
-                    String lm = lerpMode.getAsString();
+                if (obj.has("lerp_mode")) {
+                    String lm = obj.get("lerp_mode").getAsString();
                     if ("catmullrom".equals(lm)) kf.interpolationMode = 2;
                     else if ("step".equals(lm)) kf.interpolationMode = 1;
-                } else {
+                } else
                     kf.interpolationMode = 1;
-                }
 
-                JsonElement pre = obj.get("pre");
-                JsonElement post = obj.get("post");
-                if (pre != null && post != null) {
+                if (obj.has("pre") && obj.has("post")) {
                     kf.hasPreData = true;
-                    jsonElementToMolangArray(pre, kf.preData);
-                    jsonElementToMolangArray(post, kf.postData);
+                    kf.preData = jsonElementToMolangArray(obj.get("pre"));
+                    kf.postData = jsonElementToMolangArray(obj.get("post"));
                 } else {
                     kf.hasPreData = false;
-                    JsonElement src = post != null ? post : pre != null ? pre : obj;
-                    jsonElementToMolangArray(src, kf.postData);
+                    kf.postData = jsonElementToMolangArray(obj.has("post") ? obj.get("post") : obj.has("pre") ? obj.get("pre") : obj);
                 }
             } else {
                 kf.hasPreData = false;
-                jsonElementToMolangArray(valElem, kf.postData);
+                kf.postData = jsonElementToMolangArray(valElem);
             }
             targetList.add(kf);
         }
     }
 
-    private static void jsonElementToMolangArray(JsonElement elem, Object[] arr) {
-        arr[0] = FLOAT_ZERO;
-        arr[1] = FLOAT_ZERO;
-        arr[2] = FLOAT_ZERO;
-        if (elem == null || elem.isJsonNull()) return;
+    private Object[] jsonElementToMolangArray(JsonElement elem) {
+        Object[] arr = new Object[]{0f, 0f, 0f};
+        if (elem == null || elem.isJsonNull()) return arr;
 
         if (elem.isJsonArray()) {
             JsonArray jArr = elem.getAsJsonArray();
-            int n = Math.min(3, jArr.size());
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < Math.min(3, jArr.size()); i++) {
                 JsonElement e = jArr.get(i);
                 if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()) arr[i] = e.getAsFloat();
                 else arr[i] = e.getAsString();
@@ -862,10 +800,12 @@ public class YSMFolderDeserializer implements AutoCloseable {
             else val = elem.getAsString();
             arr[0] = val; arr[1] = val; arr[2] = val;
         }
+        return arr;
     }
 
     private void parseAnimationControllers(byte[] data, Map<String, RawYsmModel.RawAnimationController> targetMap) {
-        JsonObject root = parseJsonObject(data);
+        String json = new String(data, StandardCharsets.UTF_8);
+        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
         if (!root.has("animation_controllers")) return;
         JsonObject acs = root.getAsJsonObject("animation_controllers");
@@ -945,56 +885,21 @@ public class YSMFolderDeserializer implements AutoCloseable {
     private void parseGlobalResources() {
         if (inMemoryFiles != null) {
             for (Map.Entry<String, byte[]> entry : inMemoryFiles.entrySet()) {
-                String path = entry.getKey();
-                if (!readFilesMd5Map.containsKey(path)) {
-                    readFilesMd5Map.put(path, md5Hex(entry.getValue()));
-                }
-                if (isGlobalResourcePath(path)) {
-                    processGlobalResourceFile(path, entry.getValue());
-                }
+                processGlobalResourceFile(entry.getKey(), entry.getValue());
             }
         } else {
             try (Stream<Path> stream = Files.walk(rootPath)) {
                 stream.filter(Files::isRegularFile).forEach(path -> {
                     String relativePath = rootPath.relativize(path).toString().replace('\\', '/');
-                    boolean isGlobal = isGlobalResourcePath(relativePath);
-                    boolean alreadyHashed = readFilesMd5Map.containsKey(relativePath);
-
-                    if (isGlobal) {
-                        byte[] data = readResource(relativePath);
-                        if (data != null) {
-                            processGlobalResourceFile(relativePath, data);
-                        }
-                    } else if (!alreadyHashed) {
-                        try {
-                            readFilesMd5Map.put(relativePath, streamingMd5Hex(path));
-                        } catch (IOException e) {
-                            System.err.println("[YSM] Warning: Failed to hash resource: " + relativePath);
-                        }
+                    byte[] data = readResource(relativePath);
+                    if (data != null) {
+                        processGlobalResourceFile(relativePath, data);
                     }
                 });
             } catch (IOException e) {
                 System.err.println("[YSM] Warning: Failed to scan global resources. " + e.getMessage());
             }
         }
-    }
-
-    private static boolean isGlobalResourcePath(String relativePath) {
-        return relativePath.startsWith("sounds/")
-                || relativePath.endsWith(".ogg")
-                || (relativePath.startsWith("lang/") && relativePath.endsWith(".json"))
-                || (relativePath.startsWith("functions/") && relativePath.endsWith(".molang"));
-    }
-
-    private static String streamingMd5Hex(Path file) throws IOException {
-        MessageDigest digest = md5Digest();
-        try (InputStream in = Files.newInputStream(file);
-             DigestInputStream dis = new DigestInputStream(in, digest)) {
-            byte[] scratch = new byte[16 * 1024];
-            while (dis.read(scratch) != -1) {
-            }
-        }
-        return HexFormat.of().formatHex(digest.digest());
     }
 
     private void processGlobalResourceFile(String relativePath, byte[] data) {
@@ -1007,7 +912,8 @@ public class YSMFolderDeserializer implements AutoCloseable {
             String locale = relativePath.substring("lang/".length(), relativePath.length() - 5);
             try {
                 String hash = sha256Hex(data);
-                JsonObject langJson = parseJsonObject(data);
+                String langJsonStr = new String(data, StandardCharsets.UTF_8);
+                JsonObject langJson = JsonParser.parseString(langJsonStr).getAsJsonObject();
                 Map<String, String> langMap = new LinkedHashMap<>();
                 for (Map.Entry<String, JsonElement> langEntry : langJson.entrySet()) {
                     if (langEntry.getValue().isJsonPrimitive()) {
@@ -1044,32 +950,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
             return new ImageMeta(w, h, format);
         }
 
-        if (format == 1) {
-            int[] dims = readBmpDimensions(data);
-            if (dims != null) return new ImageMeta(dims[0], dims[1], format);
-        }
-
-        if (format == 3) {
-            int[] dims = readJpegDimensions(data);
-            if (dims != null) return new ImageMeta(dims[0], dims[1], format);
-        }
-
-        if (format == 1 || format == 3) {
-            try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(data))) {
-                Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-                if (readers.hasNext()) {
-                    ImageReader reader = readers.next();
-                    try {
-                        reader.setInput(iis);
-                        return new ImageMeta(reader.getWidth(0), reader.getHeight(0), format);
-                    } finally {
-                        reader.dispose();
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
         try {
             BufferedImage img = null;
             switch (format) {
@@ -1084,43 +964,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
         } catch (Exception e) {
             throw new RuntimeException("Error processing image: " + path, e);
         }
-    }
-
-    private static int[] readBmpDimensions(byte[] data) {
-        if (data.length < 26) return null;
-        int w = (data[18] & 0xFF)
-                | ((data[19] & 0xFF) << 8)
-                | ((data[20] & 0xFF) << 16)
-                | ((data[21] & 0xFF) << 24);
-        int h = (data[22] & 0xFF)
-                | ((data[23] & 0xFF) << 8)
-                | ((data[24] & 0xFF) << 16)
-                | ((data[25] & 0xFF) << 24);
-        if (w <= 0 || h == 0) return null;
-        return new int[]{w, Math.abs(h)};
-    }
-
-    private static int[] readJpegDimensions(byte[] data) {
-        if (data.length < 4 || data[0] != (byte) 0xFF || data[1] != (byte) 0xD8) return null;
-        int pos = 2;
-        while (pos + 8 < data.length) {
-            if (data[pos] != (byte) 0xFF) return null;
-            int marker = data[pos + 1] & 0xFF;
-            if (marker == 0xFF) { pos++; continue; }
-            if (marker >= 0xD0 && marker <= 0xD9) { pos += 2; continue; }
-            boolean isSof = marker >= 0xC0 && marker <= 0xCF
-                    && marker != 0xC4 && marker != 0xC8 && marker != 0xCC;
-            if (isSof) {
-                int height = ((data[pos + 5] & 0xFF) << 8) | (data[pos + 6] & 0xFF);
-                int width = ((data[pos + 7] & 0xFF) << 8) | (data[pos + 8] & 0xFF);
-                if (width > 0 && height > 0) return new int[]{width, height};
-                return null;
-            }
-            int segLen = ((data[pos + 2] & 0xFF) << 8) | (data[pos + 3] & 0xFF);
-            if (segLen < 2) return null;
-            pos += 2 + segLen;
-        }
-        return null;
     }
 
     public static int detectFormat(byte[] data) {
@@ -1171,23 +1014,24 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     private static String getStr(JsonObject obj, String key, String def) {
-        JsonElement e = obj.get(key);
-        return e != null ? e.getAsString() : def;
+        return obj.has(key) ? obj.get(key).getAsString() : def;
     }
 
     private static boolean getBool(JsonObject obj, String key, boolean def) {
-        JsonElement e = obj.get(key);
-        return e != null ? e.getAsBoolean() : def;
+        return obj.has(key) ? obj.get(key).getAsBoolean() : def;
     }
 
     private static double getDouble(JsonObject obj, String key, double def) {
-        JsonElement e = obj.get(key);
-        return e != null ? e.getAsDouble() : def;
+        return obj.has(key) ? obj.get(key).getAsDouble() : def;
     }
 
-    private static float readFloat(JsonArray arr, int idx, float def) {
-        if (arr == null || idx >= arr.size()) return def;
-        return arr.get(idx).getAsFloat();
+    private static float[] getFloatArray(JsonObject obj, String key, int size) {
+        float[] result = new float[size];
+        if (obj.has(key)) {
+            JsonArray arr = obj.getAsJsonArray(key);
+            for (int i = 0; i < Math.min(arr.size(), size); i++) result[i] = arr.get(i).getAsFloat();
+        }
+        return result;
     }
 
     private static String extractFileName(String fullPath) {
@@ -1201,17 +1045,19 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
     private String calculateFinalFolderHash() {
         try {
-            MessageDigest digest = md5Digest();
-            byte[] hexScratch = new byte[64];
+            MessageDigest digest = MessageDigest.getInstance("MD5");
             for (Map.Entry<String, String> entry : readFilesMd5Map.entrySet()) {
                 digest.update(entry.getKey().getBytes(StandardCharsets.UTF_8));
-                String val = entry.getValue();
-                int len = val.length();
-                if (len > hexScratch.length) hexScratch = new byte[len];
-                for (int i = 0; i < len; i++) hexScratch[i] = (byte) val.charAt(i);
-                digest.update(hexScratch, 0, len);
+                digest.update(entry.getValue().getBytes(StandardCharsets.UTF_8));
             }
-            return HexFormat.of().formatHex(digest.digest());
+            byte[] hash = digest.digest();
+            StringBuilder hexString = new StringBuilder(32);
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
         } catch (Exception e) {
             return "";
         }
@@ -1270,7 +1116,8 @@ public class YSMFolderDeserializer implements AutoCloseable {
         byte[] infoData = readResource("info.json");
         if (infoData != null) {
             try {
-                parseLegacyMetadata(parseJsonObject(infoData), true);
+                JsonObject infoObj = JsonParser.parseString(new String(infoData, StandardCharsets.UTF_8)).getAsJsonObject();
+                parseLegacyMetadata(infoObj, true);
             } catch (Exception e) {
                 System.err.println("Failed to parse info.json");
                 e.printStackTrace();

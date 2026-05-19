@@ -85,6 +85,7 @@ public final class GpuRenderPath {
 
         GlStateManager._activeTexture(GL13.GL_TEXTURE0 + 1);
         mc.gameRenderer.overlayTexture().setupOverlayColor();
+        GlStateManager._bindTexture(RenderSystem.getShaderTexture(1)); // overlayTexture里的texture没getter，固定bind 1
 
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
         GlStateManager._bindTexture(modelTexId);

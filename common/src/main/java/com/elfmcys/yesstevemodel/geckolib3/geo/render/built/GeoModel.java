@@ -141,6 +141,8 @@ public class GeoModel {
 
     public static native void nComputeBoneMatrices(long pointer, float[] rootPose, float[] rootNormal, float[] anim, int packedLight, ByteBuffer outBoneBuffer);
 
+    public static native void nComputeBoneMatricesLocal(long handle, float[] animArray, int packedLight, ByteBuffer outBoneBuffer);
+
     public void buildNativeCache() {
         if (bakedBones == null || bakedBones.isEmpty()) return;
 

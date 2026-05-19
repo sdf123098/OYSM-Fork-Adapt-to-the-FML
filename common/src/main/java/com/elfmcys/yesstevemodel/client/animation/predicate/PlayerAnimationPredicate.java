@@ -24,6 +24,16 @@ public class PlayerAnimationPredicate implements IAnimationPredicate<CustomPlaye
             return PlayState.STOP;
         }
         switch (CarryOnDataHelper.getCarryType(player)) {
+            case ENTITY :{
+                return IAnimationPredicate.playLoopAnimation(event, "carryon:entity");
+            }
+            case BLOCK :{
+                return IAnimationPredicate.playLoopAnimation(event, "carryon:block");
+            }
+            case PLAYER: {
+                return IAnimationPredicate.playLoopAnimation(event, "carryon:player");
+            }
+
         }
         return PlayState.STOP;
     }

@@ -24,6 +24,7 @@ layout(std430, binding = 2) readonly buffer BoneBlock {
 
 uniform vec4 u_color;
 uniform int u_packedOverlay;
+uniform mat4 u_modelView;
 
 vec3 unpackNormal_2_10_10_10(uint p) {
     int xi = int(p & 0x3FFu);
@@ -38,6 +39,15 @@ vec3 unpackNormal_2_10_10_10(uint p) {
 uint packColorRGBA(vec4 c) {
     uvec4 q = uvec4(clamp(c, 0.0, 1.0) * 255.0 + 0.5);
     return q.r | (q.g << 8) | (q.b << 16) | (q.a << 24);
+}
+
+vec3 getLocalPos(uint vIndex) {
+    uint inBase = vIndex * 8u;
+    return vec3(
+        uintBitsToFloat(raw_in[inBase + 0u]),
+        uintBitsToFloat(raw_in[inBase + 1u]),
+        uintBitsToFloat(raw_in[inBase + 2u])
+    );
 }
 
 uint packShortPair(int u, int v) {
@@ -73,6 +83,24 @@ void main() {
         vec3 nLocal = unpackNormal_2_10_10_10(packedNormal);
         vec3 nEye = normalize((b.normal * vec4(nLocal, 0.0)).xyz);
         outNormal = nEye;
+
+        uint cullableFlag = (boneAndFlags >> 24) & 0xFFu;
+        if (cullableFlag > 0u) {
+            uint quadBase = vid & ~3u;
+
+            mat4 combinedMatrix = u_modelView * b.transform;
+
+            vec3 view_v0 = (combinedMatrix * vec4(getLocalPos(quadBase + 0u), 1.0)).xyz;
+            vec3 view_v1 = (combinedMatrix * vec4(getLocalPos(quadBase + 1u), 1.0)).xyz;
+            vec3 view_v2 = (combinedMatrix * vec4(getLocalPos(quadBase + 2u), 1.0)).xyz;
+
+            vec3 geometricNormal = cross(view_v1 - view_v0, view_v2 - view_v0);
+
+            if (dot(view_v0, geometricNormal) >= 0.0) {
+                outPos = vec3(2.0, 2.0, 2.0);
+                outNormal = vec3(0.0, 0.0, 1.0);
+            }
+        }
     }
     int blockL = (b.packedLight >> 4) & 0xF;
     int skyL = (b.packedLight >> 20) & 0xF;

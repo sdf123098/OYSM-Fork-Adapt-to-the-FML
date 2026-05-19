@@ -8,7 +8,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import rip.ysm.api.client.HudOverlay;
 
-public class LoadingStateOverlay implements HudOverlay {
+public class ExtraPlayerOverlay implements HudOverlay {
     @Override
     public void render(GuiGraphics guiGraphics, Font font, float partialTick, int screenWidth, int screenHeight) {
         Minecraft minecraft;
