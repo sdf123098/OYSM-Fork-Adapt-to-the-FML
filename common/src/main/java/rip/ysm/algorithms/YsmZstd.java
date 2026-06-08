@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 public class YsmZstd {
     public static byte[] decompress(byte[] rawData) throws IOException {
@@ -20,9 +21,30 @@ public class YsmZstd {
         if(NativeLibLoader.isLoaded())
             return YSMNative.ysmZstdDecompress(rawData);
 */
+        try {
+            return decompressStrict(rawData, offset, length);
+        } catch (Throwable strictError) {
+            try {
+                byte[] zstdData = copyInput(rawData, offset, length);
+                YsmZstd.washInPlace(zstdData, 0, zstdData.length, false);
+                return ZstdUtil.decompress(zstdData);
+            } catch (Throwable legacyError) {
+                strictError.addSuppressed(legacyError);
+                if (strictError instanceof IOException ioException) {
+                    throw ioException;
+                }
+                if (strictError instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw new IOException("Failed to decompress YSM ZSTD data", strictError);
+            }
+        }
+    }
 
-        YsmZstd.washInPlace(rawData, offset, length);
-        return ZstdUtil.decompress(rawData, offset, length);
+    public static byte[] decompressStrict(byte[] rawData, int offset, int length) throws IOException {
+        byte[] zstdData = copyInput(rawData, offset, length);
+        YsmZstd.washInPlace(zstdData, 0, zstdData.length, true);
+        return ZstdUtil.decompress(zstdData);
     }
 
     public static byte[] compress(byte[] rawData) {
@@ -42,6 +64,10 @@ public class YsmZstd {
     }
 
     private static void washInPlace(byte[] data, int base, int length) {
+        washInPlace(data, base, length, false);
+    }
+
+    private static void washInPlace(byte[] data, int base, int length, boolean preserveChecksumFlag) {
         if (data == null || length < 5) {
             throw new IllegalArgumentException("Invalid data length");
         }
@@ -55,7 +81,9 @@ public class YsmZstd {
         }
 
         byte fhd = data[base + 4];
-        data[base + 4] = (byte) (fhd & 0xFB);
+        if (!preserveChecksumFlag) {
+            data[base + 4] = (byte) (fhd & 0xFB);
+        }
 
         int frameHeaderSize = calculateFrameHeaderSize(fhd);
         int offset = base + 4 + frameHeaderSize;
@@ -145,6 +173,13 @@ public class YsmZstd {
         }
 
         return data;
+    }
+
+    private static byte[] copyInput(byte[] input, int offset, int length) {
+        if (offset == 0 && length == input.length) {
+            return Arrays.copyOf(input, input.length);
+        }
+        return Arrays.copyOfRange(input, offset, offset + length);
     }
 
     private static int calculateFrameHeaderSize(byte fhd) {
