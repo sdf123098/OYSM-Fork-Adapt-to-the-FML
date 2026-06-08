@@ -93,6 +93,7 @@ processResources {
 shadowJar {
     configurations = [project.configurations.shadowBundle]
     archiveClassifier = 'dev-shadow'
+    relocate 'org.concentus', 'rip.ysm.shadow.concentus'
 }
 
 remapJar {

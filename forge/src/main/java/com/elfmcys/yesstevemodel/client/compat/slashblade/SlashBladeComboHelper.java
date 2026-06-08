@@ -20,7 +20,7 @@ public class SlashBladeComboHelper {
     }
 
     public static String getComboState(ISlashBladeState slashBladeState, long j, LivingEntity livingEntity) {
-        ResourceLocation comboSeq = slashBladeState.getComboSeq();
+        ResourceLocation comboSeq = slashBladeState.getComboSeq().path;
         ComboState comboState = (ComboState) ((IForgeRegistry) ComboStateRegistry.REGISTRY.get()).getValue(comboSeq);
         if (comboState == null) {
             return StringPool.EMPTY;
